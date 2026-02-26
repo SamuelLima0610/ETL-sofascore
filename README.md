@@ -4,37 +4,76 @@
 
 **Quick Start**:
 - **Prerequisites**: Python 3.8+, virtualenv
-- **Install**:
+# ETL Statistics
+
+Este repositório contém um pipeline ETL (Extract, Transform, Load) simples para coletar, transformar e persistir estatísticas de partidas.
+
+## Descrição
+
+O projeto implementa as três etapas principais de um ETL:
+- Extração: coleta dados brutos de fontes externas (módulo de extração).
+- Transformação: normaliza e estrutura os dados para uso analítico.
+- Carga (Load): persiste os dados transformados em um destino (arquivo, banco, etc.).
+
+## Pré-requisitos
+
+- Python 3.8 ou superior
+- Virtualenv (opcional, mas recomendado)
+
+## Instalação
+
+1. Criar e ativar um ambiente virtual:
 
 ```bash
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt  # create if needed: requests beautifulsoup4
 ```
 
-- **Run**:
+2. Instalar dependências:
+
+```bash
+pip install -r requirements.txt
+```
+
+## Configuração
+
+Se o projeto usar variáveis de ambiente, coloque-as em um arquivo `.env` na raiz e carregue-as no código com `python-dotenv` (já listado em `requirements.txt` se necessário).
+
+## Uso
+
+Para executar o fluxo principal (extração → transformação → carga mínima de exemplo):
 
 ```bash
 python main.py
 ```
 
-**Files**:
-- **`extractor.py`**: fetches seasons and game data from SofaScore.
-- **`transform.py`**: normalizes game statistics into a consistent JSON-friendly structure.
-- **`main.py`**: example run flow (extract → transform). To persist results, call the loader from here or run the loader as a separate step.
+O arquivo `main.py` demonstra como orquestrar as etapas. Ajuste conforme seu sink (destino) e parâmetros.
 
-**Implementing the Load**
-- Goal: persist transformed game objects to your desired sink (file, database, data warehouse).
+## Estrutura do repositório
 
-Recommended steps to implement a production loader:
-- Decide sink: JSON/CSV (filesystem), SQLite/Postgres, or cloud (S3, BigQuery).
-- Create a `Loader` class with a `load(data)` method that accepts the transformed list of games.
-- If using a relational DB, implement an idempotent upsert: create tables and use `INSERT ... ON CONFLICT` (Postgres) or replace semantics.
-- Add batching and retries for large volumes and transient failures.
+- [const.py](const.py): constantes e configurações do projeto.
+- [extractor.py](extractor.py): código responsável por extrair/baixar os dados brutos.
+- [transform.py](transform.py): lógica de transformação.
+- [load.py](load.py): exemplo de rotina de carga (persiste dados transformados).
+- [main.py](main.py): script de execução que integra `extractor`, `transform` e `load`.
+- [requirements.txt](requirements.txt): dependências do projeto.
 
-**Next steps / Ideas**
-- Add a database loader (`loader_db.py`) that writes to Postgres or SQLite.
-- Add CLI flags to `main.py` to select sink and season range.
-- Add tests for `Transform.transform()` and loader behavior.
+## Como estender
 
-If you want, I can implement a DB loader (SQLite or Postgres) and wire it into `main.py`.
+- Implementar um loader de produção (por exemplo: SQLite, Postgres, S3, BigQuery).
+- Adicionar argumentos de linha de comando em `main.py` para escolher períodos, fontes e sinks.
+- Incluir testes unitários para `transform.py` e integração para o fluxo completo.
+
+## Boas práticas recomendadas
+
+- Fazer a carga de forma idempotente (upserts) quando usar banco relacional.
+- Implementar paginação, batching e retries se a extração lidar com grande volume de dados.
+- Separar credenciais e informações sensíveis em variáveis de ambiente.
+
+## Próximos passos sugeridos
+
+- Posso implementar um loader SQLite de exemplo e integrar no `main.py` se desejar.
+
+---
+
+Se quiser que eu gere um `loader_db.py` ou adicione opções de CLI ao `main.py`, diga qual destino prefere (SQLite ou Postgres). 
