@@ -1,0 +1,6 @@
+MATCH_OVER_VIEW = ['Ball Possession', 'Big chances', 'Free kicks', 'Corner kicks', 'Fouls', 'Passes', 'Goalkeeper saves', 'Tackles', 'Yellow cards']
+SHOTS = ['Total shots', 'Shots on target', 'Shots off target', 'Blocked shots', 'Shots inside box', 'Shots outside box', 'Hit woodwork']
+PASSES = ['Accurate passes', 'Inaccurate passes', 'Long Balls', 'Throw-ins', 'Crosses']
+DUELS = ['Ground duels', 'Aerial duels', 'Dispossessed', 'Dribbles']
+DEFENDING = ['Tackles won', 'Interceptions', 'Clearances', 'Recoveries']
+GOALKEEPING = ['Big saves', 'Punches', 'Goals prevented', 'High Claims', 'Goal kicks', 'Punches']

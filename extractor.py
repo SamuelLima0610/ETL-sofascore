@@ -3,10 +3,10 @@ from bs4 import BeautifulSoup
 
 class Extractor:
     
-    def __init__(self):
+    def __init__(self, competition_url):
         self.session = requests.Session()
         self.session.get("https://www.sofascore.com/pt/")
-        response = self.session.get("https://www.sofascore.com/pt/football/tournament/brazil/brasileirao-serie-a/325#id:87678")
+        response = self.session.get(competition_url)
         soup = BeautifulSoup(response.text, "html.parser")
         element = soup.find("script", {"id": "__NEXT_DATA__"})
         dados = json.loads(element.text)
