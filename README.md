@@ -1,31 +1,25 @@
-**Project**: ETL for SofaScore games
-
-- **Description**: ETL pipeline that extracts match data from SofaScore, transforms statistics into a consistent structure, and loads results to a sink. This repository contains the extractor (`[extractor.py](extractor.py)`), transformer (`[transform.py](transform.py)`), and a sample loader (`[loader.py](loader.py)`) to persist transformed data.
-
-**Quick Start**:
-- **Prerequisites**: Python 3.8+, virtualenv
+````markdown
 # ETL Statistics
 
-Este repositório contém um pipeline ETL (Extract, Transform, Load) simples para coletar, transformar e persistir estatísticas de partidas.
+Este repositório contém um pipeline ETL para coletar, transformar e persistir estatísticas de partidas (fonte: SofaScore).
 
-## Descrição
+Resumo rápido:
+- Extração: `etl/extractor.py`
+- Transformação: `etl/transform.py`
+- Carga: `etl/load.py` (exemplo com MongoDB)
+- API + tasks: `api.py`, `celery_worker.py`
 
-O projeto implementa as três etapas principais de um ETL:
-- Extração: coleta dados brutos de fontes externas (módulo de extração).
-- Transformação: normaliza e estrutura os dados para uso analítico.
-- Carga (Load): persiste os dados transformados em um destino (arquivo, banco, etc.).
+**Pré-requisitos**
+- Python 3.8+
+- Redis (broker para Celery) — recomendado para executar tarefas em background
+- MongoDB (opcional, usado pelo `Load` se quiser persistir dados)
 
-## Pré-requisitos
+## Instalação rápida
 
-- Python 3.8 ou superior
-- Virtualenv (opcional, mas recomendado)
-
-## Instalação
-
-1. Criar e ativar um ambiente virtual:
+1. Criar/ativar ambiente virtual:
 
 ```bash
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 ```
 
@@ -35,45 +29,100 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Configuração
+3. (Opcional) Criar arquivo `.env` com as variáveis abaixo quando usar MongoDB/Celery:
 
-Se o projeto usar variáveis de ambiente, coloque-as em um arquivo `.env` na raiz e carregue-as no código com `python-dotenv` (já listado em `requirements.txt` se necessário).
-
-## Uso
-
-Para executar o fluxo principal (extração → transformação → carga mínima de exemplo):
-
-```bash
-python main.py
+```
+REDIS_URL=redis://localhost:6379/0
+USER_DB=<mongo_user>
+PASSWORD_DB=<mongo_password>
+MONGODB_COLLECTION=<collection_name>
 ```
 
-O arquivo `main.py` demonstra como orquestrar as etapas. Ajuste conforme seu sink (destino) e parâmetros.
+## Executando localmente
 
-## Estrutura do repositório
+Guia rápido:
 
-- [const.py](const.py): constantes e configurações do projeto.
-- [extractor.py](extractor.py): código responsável por extrair/baixar os dados brutos.
-- [transform.py](transform.py): lógica de transformação.
-- [load.py](load.py): exemplo de rotina de carga (persiste dados transformados).
-- [main.py](main.py): script de execução que integra `extractor`, `transform` e `load`.
-- [requirements.txt](requirements.txt): dependências do projeto.
+- Usar o script `quickstart.sh` para preparar o ambiente.
+- Usar `start.sh` para iniciar o Celery worker e a API (script inicia o worker e o Uvicorn).
 
-## Como estender
+Comandos manuais:
 
-- Implementar um loader de produção (por exemplo: SQLite, Postgres, S3, BigQuery).
-- Adicionar argumentos de linha de comando em `main.py` para escolher períodos, fontes e sinks.
-- Incluir testes unitários para `transform.py` e integração para o fluxo completo.
+```bash
+# Iniciar Celery Worker
+celery -A celery_worker.celery_app worker --loglevel=info
 
-## Boas práticas recomendadas
+# Iniciar API (FastAPI / Uvicorn)
+python -m uvicorn api:app --reload --host 0.0.0.0 --port 8000
 
-- Fazer a carga de forma idempotente (upserts) quando usar banco relacional.
-- Implementar paginação, batching e retries se a extração lidar com grande volume de dados.
-- Separar credenciais e informações sensíveis em variáveis de ambiente.
+# Opcional: Flower para monitorar tarefas
+celery -A celery_worker.celery_app flower --port=5555
+```
+
+## API e endpoints principais
+
+- `GET /` : informações básicas e links para docs
+- `GET /tournaments` : retorna torneios (usa `etl/extractor.py`)
+- `GET /seasons` : obter temporadas (query params: `slug_tournament`, `id_tournament`, `country`)
+-- `GET /health` : health check
+
+GET `/games` — buscar jogos persistidos
+
+Esse endpoint retorna os jogos já persistidos (MongoDB) e aceita filtros dinâmicos via query params. Exemplos de filtros suportados:
+
+- `season` (int)
+- `round` (int)
+- `home_team` (string)
+- `away_team` (string)
+- qualquer outro campo presente nos documentos (ex.: `home_score`, `away_score`)
+
+Comportamento:
+
+- Os query params numéricos são convertidos automaticamente (inteiros ou floats). Strings são usadas como igualdade exata.
+- Se nenhum filtro for fornecido, todos os jogos persistidos são retornados.
+
+Exemplo (curl):
+
+```bash
+curl "http://localhost:8000/games?season=58766&round=10&home_team=Flamengo"
+```
+
+Resposta (exemplo):
+
+```json
+{
+  "count": 3,
+  "filters": {"season": 58766, "round": 10, "home_team": "Flamengo"},
+  "games": [ /* lista de jogos */ ]
+}
+```
+
+- Async (via Celery):
+  - `POST /async/seasons`
+  - `POST /async/games/{season_id}`?transform_data=true|false
+  - `POST /async/games` (query params: `slug_tournament`, `id_tournament`, `country`, `transform_data`)
+  - `GET /tasks/{task_id}` : status da task
+  - `DELETE /tasks/{task_id}` : cancelar task
+
+Docs auto geradas (Swagger): `http://localhost:8000/docs`
+
+## Estrutura relevante
+
+- `api.py` — aplicação FastAPI que expõe endpoints sync/async
+- `celery_worker.py` — tasks Celery que usam `etl/` para extrair/transformar/carregar
+- `etl/extractor.py` — extrai dados da SofaScore
+- `etl/transform.py` — transforma estatísticas em estrutura consistente
+- `etl/load.py` — exemplo de loader para MongoDB
+- `const/const_football.py` — listas/constantes de estatísticas
+- `start.sh`, `quickstart.sh` — scripts de ajuda
+
+## Testes
+
+- `test_api.py` contém testes básicos para a API (rodar com pytest)
 
 ## Próximos passos sugeridos
 
-- Posso implementar um loader SQLite de exemplo e integrar no `main.py` se desejar.
+- Integrar um loader de exemplo (SQLite/Postgres) além do MongoDB
+- Adicionar mais testes de integração
+- Melhorar tratamento de erros e retries nas tasks Celery
 
----
-
-Se quiser que eu gere um `loader_db.py` ou adicione opções de CLI ao `main.py`, diga qual destino prefere (SQLite ou Postgres). 
+````

@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from extractor import Extractor
-from load import Load
+from etl.extractor import Extractor
+from etl.load import Load
 
 from celery_worker import (
     celery_app,
@@ -99,9 +99,9 @@ async def get_games(request: Request):
     Aceita qualquer combinação de parâmetros de filtro via query params.
     
     Exemplos de uso:
-    - /games?season=2023
+    - /games?season=87678
     - /games?home_team=Flamengo
-    - /games?season=2023&round=10
+    - /games?season=87678&round=10
     - /games?home_team=Flamengo&away_team=Palmeiras
     - /games (retorna todos os jogos)
     """

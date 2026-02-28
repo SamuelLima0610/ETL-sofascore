@@ -1,4 +1,4 @@
-from const import MATCH_OVER_VIEW, SHOTS, PASSES, DUELS, DEFENDING, GOALKEEPING
+from const.const_football import MATCH_OVER_VIEW, SHOTS, PASSES, DUELS, DEFENDING, GOALKEEPING
 
 class Transform:
 

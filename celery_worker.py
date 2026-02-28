@@ -1,7 +1,7 @@
 from celery import Celery
-from extractor import Extractor
-from transform import Transform
-from load import Load
+from etl.extractor import Extractor
+from etl.transform import Transform
+from etl.load import Load
 from dotenv import load_dotenv
 import os
 
