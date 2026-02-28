@@ -1,7 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from extractor import Extractor
+from load import Load
 
 from celery_worker import (
     celery_app,
@@ -11,21 +12,24 @@ from celery_worker import (
 )
 from celery.result import AsyncResult
 
-# URL padrão do Brasileirão Série A
-DEFAULT_COMPETITION_URL = "https://www.sofascore.com/pt/football/tournament/brazil/brasileirao-serie-a/325#id:87678"
-
-# Instância global do extractor (inicializada no lifespan)
+# Instâncias globais (inicializadas no lifespan)
 extractor = None
+load = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Inicializa recursos na startup e limpa no shutdown."""
-    global extractor
+    global extractor, load
     print("Inicializando Extractor...")
-    extractor = Extractor(DEFAULT_COMPETITION_URL)
+    extractor = Extractor()
     print("Extractor inicializado com sucesso!")
+    print("Inicializando Load...")
+    load = Load()
+    print("Load inicializado com sucesso!")
     yield
     print("Encerrando aplicação...")
+    if load:
+        load.desconnect()
 
 app = FastAPI(
     title="ETL Statistics API",
@@ -49,7 +53,7 @@ async def root():
         "message": "ETL Statistics API v2.0 - Com processamento em background via Celery",
         "docs": "/docs",
         "endpoints": {
-            "sync": ["/seasons", "/health"],
+            "sync": ["/seasons", "/health", "/games"],
             "async": ["/async/seasons", "/async/games/{season_id}", "/async/games"],
             "status": ["/tasks/{task_id}"]
         }
@@ -59,12 +63,23 @@ async def root():
 # ============================================
 # ENDPOINTS SÍNCRONOS (resposta imediata)
 # ============================================
-
-@app.get("/seasons")
-async def get_seasons():
+@app.get("/tournaments")
+async def get_tournaments():
     if extractor is None:
         raise HTTPException(status_code=503, detail="Extractor não inicializado")
-    return {"seasons": extractor.get_seasons()}
+    # Construir a URL da competição com base nos parâmetros
+    return {"tournaments": extractor.get_football_tournaments()}
+
+
+@app.get("/seasons")
+async def get_seasons(slug_tournament: str, id_tournament: int, country: str):
+    
+    if extractor is None:
+        raise HTTPException(status_code=503, detail="Extractor não inicializado")
+    # Construir a URL da competição com base nos parâmetros
+    competition_url = f"https://www.sofascore.com/pt/football/tournament/{country}/{slug_tournament}/{id_tournament}"
+    
+    return {"seasons": extractor.get_seasons(competition_url)}
 
 
 @app.get("/health")
@@ -75,6 +90,52 @@ async def health_check():
         "extractor_ready": extractor is not None,
         "celery_ready": celery_app.control.inspect().ping() is not None
     }
+
+
+@app.get("/games")
+async def get_games(request: Request):
+    """
+    Endpoint para buscar jogos com filtros dinâmicos.
+    Aceita qualquer combinação de parâmetros de filtro via query params.
+    
+    Exemplos de uso:
+    - /games?season=2023
+    - /games?home_team=Flamengo
+    - /games?season=2023&round=10
+    - /games?home_team=Flamengo&away_team=Palmeiras
+    - /games (retorna todos os jogos)
+    """
+    if load is None:
+        raise HTTPException(status_code=503, detail="Load não inicializado")
+    
+    # Captura todos os query params e cria o filtro dinamicamente
+    filters = {}
+    query_params = dict(request.query_params)
+    
+    for key, value in query_params.items():
+        # Tenta converter valores numéricos
+        if value.isdigit():
+            filters[key] = int(value)
+        elif value.replace('.', '', 1).isdigit():
+            filters[key] = float(value)
+        else:
+            filters[key] = value
+    
+    try:
+        games = load.read_data(query=filters)
+        
+        # Remove o campo _id do MongoDB para serialização JSON
+        for game in games:
+            if '_id' in game:
+                game['_id'] = str(game['_id'])
+        
+        return {
+            "count": len(games),
+            "filters": filters,
+            "games": games
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar jogos: {str(e)}")
 
 
 # ============================================
@@ -104,8 +165,8 @@ async def get_games_by_season_async(season_id: int, transform_data: bool = False
 
 
 @app.post("/async/games")
-async def get_all_games_async(transform_data: bool = False):
-    task = extract_all_games_task.delay(transform_data)
+async def get_all_games_async(slug_tournament: str, id_tournament: int, country: str,transform_data: bool = False):
+    task = extract_all_games_task.delay(slug_tournament, id_tournament, country, transform_data)
     return {
         "task_id": task.id,
         "transform_data": transform_data,

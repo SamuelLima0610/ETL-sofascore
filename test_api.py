@@ -25,12 +25,28 @@ def test_health():
     print(f"Status: {response.status_code}")
     print(json.dumps(response.json(), indent=2))
 
+def test_tournaments():
+    """Testa o endpoint de tournaments (síncrono)"""
+    print_section("2. Obtendo Torneios (Síncrono)")
+    
+    response = requests.get(f"{API_URL}/tournaments")
+    data = response.json()
+    
+    print(f"Status: {response.status_code}")
+    print(f"Total de torneios: {len(data['tournaments'])}")
+    print(f"\nPrimeiros 3 torneios:")
+    for tournament in data['tournaments'][:3]:
+        print(f"  - ID: {tournament['id']}, Nome: {tournament['name']}")
 
 def test_seasons():
     """Testa o endpoint de seasons (síncrono)"""
-    print_section("2. Obtendo Temporadas (Síncrono)")
+    print_section("3. Obtendo Temporadas (Síncrono)")
     
-    response = requests.get(f"{API_URL}/seasons")
+    response = requests.get(f"{API_URL}/seasons", params={
+        "slug_tournament": "brasileirao-serie-a",
+        "id_tournament": 325,
+        "country": "brazil"
+    })
     data = response.json()
     
     print(f"Status: {response.status_code}")
@@ -39,12 +55,28 @@ def test_seasons():
     for season in data['seasons'][:3]:
         print(f"  - ID: {season['id']}, Ano: {season['year']}")
     
-    return data['seasons'][2]['id'] if data['seasons'] else None
+    return data['seasons'][0]['id'] if data['seasons'] else None
+
+def test_games(season_id):
+    """Testa o endpoint de games (síncrono)"""
+    print_section(f"6. Obtendo Jogos (Síncrono - Temporada {season_id})")
+    
+    response = requests.get(f"{API_URL}/games", params={"season": season_id})
+    data = response.json()
+    
+    print(f"Status: {response.status_code}")
+    print(f"Total de jogos: {len(data['games'])}")
+    
+    if data['games']:
+        print(f"\nPrimeiro jogo:")
+        game = data['games'][0]
+        print(f"  - {game['home_team']} {game['home_score']} x {game['away_score']} {game['away_team']}")
+        print(f"  - Rodada: {game['round']}")
 
 
 def test_async_extraction(season_id):
     """Testa extração assíncrona de jogos"""
-    print_section(f"3. Extração Assíncrona (Temporada {season_id})")
+    print_section(f"4. Extração Assíncrona (Temporada {season_id})")
     
     # Iniciar a task
     print("Iniciando extração em background...")
@@ -96,7 +128,7 @@ def test_async_extraction(season_id):
 
 def test_get_result(task_id):
     """Obtém o resultado de uma task"""
-    print_section(f"4. Obtendo Resultado (Task {task_id})")
+    print_section(f"5. Obtendo Resultado (Task {task_id})")
     
     response = requests.get(f"{API_URL}/tasks/{task_id}")
     data = response.json()
@@ -127,20 +159,25 @@ def main():
         # 1. Health check
         test_health()
         
-        # 2. Obter temporadas
+        # 2. Obter torneios
+        test_tournaments()
+        # 3. Obter temporadas
         season_id = test_seasons()
         
         if not season_id:
             print("❌ Nenhuma temporada encontrada!")
             return
         
-        # 3. Extração assíncrona
+        # 4. Extração assíncrona
         task_id = test_async_extraction(season_id)
         
         if task_id:
-            # 4. Obter resultado
+            # 5. Obter resultado
             test_get_result(task_id)
         
+        # Finalização
+        test_games(season_id)
+
         print_section("✅ Testes Concluídos")
         print("\nPara mais informações, acesse:")
         print(f"  - Documentação: {API_URL}/docs")

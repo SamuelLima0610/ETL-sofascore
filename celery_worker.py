@@ -40,9 +40,6 @@ celery_app.conf.update(
     task_soft_time_limit=3300,  # 55 minutos
 )
 
-# URL padrão do Brasileirão Série A
-DEFAULT_COMPETITION_URL = "https://www.sofascore.com/pt/football/tournament/brazil/brasileirao-serie-a/325#id:87678"
-
 @celery_app.task(bind=True, name='extract_games_by_season')
 def extract_games_by_season_task(self, season_id: int, transform_data: bool = False):
     try:
@@ -50,7 +47,7 @@ def extract_games_by_season_task(self, season_id: int, transform_data: bool = Fa
         self.update_state(state='PROGRESS', meta={'current': 0, 'total': 38, 'status': 'Iniciando extração...'})
         
         # Inicializa extractor
-        extractor = Extractor(DEFAULT_COMPETITION_URL)
+        extractor = Extractor()
         self.update_state(state='PROGRESS', meta={'current': 1, 'total': 38, 'status': 'Extractor inicializado'})
         
         # Extrai jogos
@@ -65,9 +62,13 @@ def extract_games_by_season_task(self, season_id: int, transform_data: bool = Fa
             
             # Salva no MongoDB
             loader = Load()
-            loader.insert_data(games)
+            games_saved = loader.read_data({'season': season_id})
+            if len(games_saved) == len(games):
+                self.update_state(state='PROGRESS', meta={'current': 37, 'total': 38, 'status': 'Dados já existem no MongoDB'})
+            else:
+                loader.insert_data(games)
+                self.update_state(state='PROGRESS', meta={'current': 37, 'total': 38, 'status': 'Dados salvos no MongoDB'})
             loader.desconnect()
-            self.update_state(state='PROGRESS', meta={'current': 37, 'total': 38, 'status': 'Dados salvos no MongoDB'})
             
             # Limpa ObjectIds do MongoDB para que os dados sejam JSON serializáveis
             games = clean_mongodb_ids(games)
@@ -84,14 +85,15 @@ def extract_games_by_season_task(self, season_id: int, transform_data: bool = Fa
 
 
 @celery_app.task(bind=True, name='extract_all_games')
-def extract_all_games_task(self, transform_data: bool = False):
+def extract_all_games_task(self, slug_tournament: str, id_tournament: int, country: str = "brazil",transform_data: bool = False):
     try:
         # Atualiza progresso
         self.update_state(state='PROGRESS', meta={'current': 0, 'total': 100, 'status': 'Iniciando extração...'})
         
         # Inicializa extractor
-        extractor = Extractor(DEFAULT_COMPETITION_URL)
-        seasons = extractor.get_seasons()
+        extractor = Extractor()
+        competition_url = f"https://www.sofascore.com/pt/football/tournament/{country}/{slug_tournament}/{id_tournament}"
+        seasons = extractor.get_seasons(competition_url)
         total_seasons = len(seasons)
         
         self.update_state(
@@ -142,13 +144,12 @@ def extract_all_games_task(self, transform_data: bool = False):
 
 
 @celery_app.task(bind=True, name='get_seasons')
-def get_seasons_task(self):
+def get_seasons_task(self, slug_tournament: str, id_tournament: int, country: str):
     try:
         self.update_state(state='PROGRESS', meta={'status': 'Buscando temporadas...'})
-        
-        extractor = Extractor(DEFAULT_COMPETITION_URL)
-        seasons = extractor.get_seasons()
-        
+        extractor = Extractor()
+        competition_url = f"https://www.sofascore.com/pt/football/tournament/{country}/{slug_tournament}/{id_tournament}"
+        seasons = extractor.get_seasons(competition_url)
         return {
             'status': 'completed',
             'seasons': seasons
