@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from etl.extractor import Extractor
 from etl.load import Load
+import process
 
 from celery_worker import (
     celery_app,
@@ -63,6 +64,15 @@ async def root():
 # ============================================
 # ENDPOINTS SÍNCRONOS (resposta imediata)
 # ============================================
+@app.get("/health")
+async def health_check():
+    """Endpoint para verificar se a API está funcionando."""
+    return {
+        "status": "healthy",
+        "extractor_ready": extractor is not None,
+        "celery_ready": celery_app.control.inspect().ping() is not None
+    }
+
 @app.get("/tournaments")
 async def get_tournaments():
     if extractor is None:
@@ -80,17 +90,6 @@ async def get_seasons(slug_tournament: str, id_tournament: int, country: str):
     competition_url = f"https://www.sofascore.com/pt/football/tournament/{country}/{slug_tournament}/{id_tournament}"
     
     return {"seasons": extractor.get_seasons(competition_url)}
-
-
-@app.get("/health")
-async def health_check():
-    """Endpoint para verificar se a API está funcionando."""
-    return {
-        "status": "healthy",
-        "extractor_ready": extractor is not None,
-        "celery_ready": celery_app.control.inspect().ping() is not None
-    }
-
 
 @app.get("/games")
 async def get_games(request: Request):
@@ -137,6 +136,16 @@ async def get_games(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar jogos: {str(e)}")
 
+@app.get("/versus")
+async def get_versus_stats(team_one: str, team_two: str):
+    
+    if extractor is None:
+        raise HTTPException(status_code=503, detail="Extractor não inicializado")
+    
+    at_house = load.read_data(query={"home_team": team_one, "away_team": team_two})
+    at_away = load.read_data(query={"home_team": team_two, "away_team": team_one})
+
+    return process.get_versus_stats(at_house, at_away)
 
 # ============================================
 # ENDPOINTS ASSÍNCRONOS (processamento em background)

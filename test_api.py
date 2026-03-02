@@ -55,7 +55,7 @@ def test_seasons():
     for season in data['seasons'][:3]:
         print(f"  - ID: {season['id']}, Ano: {season['year']}")
     
-    return data['seasons'][0]['id'] if data['seasons'] else None
+    return data['seasons'][1]['id'] if data['seasons'] else None
 
 def test_games(season_id):
     """Testa o endpoint de games (síncrono)"""
@@ -73,6 +73,18 @@ def test_games(season_id):
         print(f"  - {game['home_team']} {game['home_score']} x {game['away_score']} {game['away_team']}")
         print(f"  - Rodada: {game['round']}")
 
+def versus_stats(team_one, team_two):
+    """Testa o endpoint de versus (síncrono)"""
+    print_section("7. Obtendo Estatísticas de Confronto (Síncrono)")
+    
+    response = requests.get(f"{API_URL}/versus", params={
+        "team_one": team_one,
+        "team_two": team_two
+    })
+    data = response.json()
+    
+    print(f"Status: {response.status_code}")
+    print(f"\n Dados do confronto: {json.dumps(data['home_games'], indent=2)}\n {json.dumps(data['away_games'], indent=2)}")
 
 def test_async_extraction(season_id):
     """Testa extração assíncrona de jogos"""
@@ -177,6 +189,9 @@ def main():
         
         # Finalização
         test_games(season_id)
+
+        #Versus
+        versus_stats("Flamengo", "Palmeiras")
 
         print_section("✅ Testes Concluídos")
         print("\nPara mais informações, acesse:")
