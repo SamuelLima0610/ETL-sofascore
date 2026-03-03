@@ -50,6 +50,7 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
+    """Apresenta informações iniciais da API e links úteis."""
     return {
         "message": "ETL Statistics API v2.0 - Com processamento em background via Celery",
         "docs": "/docs",
@@ -66,7 +67,7 @@ async def root():
 # ============================================
 @app.get("/health")
 async def health_check():
-    """Endpoint para verificar se a API está funcionando."""
+    """Verifica se a API e dependências principais (Extractor e Celery) estão saudáveis."""
     return {
         "status": "healthy",
         "extractor_ready": extractor is not None,
@@ -90,6 +91,7 @@ def get_tournaments_info():
 
 @app.get("/tournaments")
 async def get_tournaments():
+    """Lista torneios disponíveis para cada categoria esportiva suportada."""
     if extractor is None:
         raise HTTPException(status_code=503, detail="Extractor não inicializado")
     # Construir a URL da competição com base nos parâmetros
@@ -98,6 +100,13 @@ async def get_tournaments():
 
 @app.get("/seasons")
 async def get_seasons(slug_tournament: str, tournament_id: int, country: str):
+    """Retorna as temporadas de um torneio.
+
+    Parâmetros:
+    - slug_tournament: slug do torneio no SofaScore.
+    - tournament_id: identificador numérico do torneio.
+    - country: país presente na URL do torneio.
+    """
     if extractor is None:
         raise HTTPException(status_code=503, detail="Extractor não inicializado")
     # Construir a URL da competição com base nos parâmetros
@@ -107,16 +116,21 @@ async def get_seasons(slug_tournament: str, tournament_id: int, country: str):
 
 @app.get("/games/{category}")
 async def get_games(category: str, request: Request):
-    """
-    Endpoint para buscar jogos com filtros dinâmicos.
-    Aceita qualquer combinação de parâmetros de filtro via query params.
-    
-    Exemplos de uso:
-    - /games?season=87678
-    - /games?home_team=Flamengo
-    - /games?season=87678&round=10
-    - /games?home_team=Flamengo&away_team=Palmeiras
-    - /games (retorna todos os jogos)
+    """Busca jogos de uma categoria usando filtros dinâmicos via query params.
+
+    Parâmetros de rota:
+    - category: coleção ou esporte em que os dados estão salvos.
+
+    Principais query params aceitos (todos opcionais e combináveis):
+    - season: id da temporada.
+    - round: número da rodada.
+    - home_team / away_team: nomes das equipes.
+    - Outros campos numéricos ou texto são aceitos e usados como filtro direto.
+
+    Exemplos:
+    - /games/football?season=87678
+    - /games/stats?home_team=Flamengo&away_team=Palmeiras
+    - /games/football (retorna todos os jogos da categoria)
     """
     if load is None:
         raise HTTPException(status_code=503, detail="Load não inicializado")
@@ -152,7 +166,13 @@ async def get_games(category: str, request: Request):
 
 @app.get("/versus/{category}")
 async def get_versus_stats(category: str, team_one: str, team_two: str):
-    
+    """Compara desempenho histórico entre duas equipes.
+
+    Parâmetros de rota:
+    - category: coleção/esporte consultado.
+    - team_one: equipe A (considerada mandante na primeira busca).
+    - team_two: equipe B (considerada visitante na primeira busca).
+    """
     if extractor is None:
         raise HTTPException(status_code=503, detail="Extractor não inicializado")
     
@@ -167,6 +187,7 @@ async def get_versus_stats(category: str, team_one: str, team_two: str):
 
 @app.post("/async/seasons")
 async def get_seasons_async():
+    """Dispara task Celery para buscar temporadas de todos os torneios configurados."""
     task = get_seasons_task.delay()
     return {
         "task_id": task.id,
@@ -177,6 +198,15 @@ async def get_seasons_async():
 
 @app.post("/async/games/{tournament_id}/{season_id}")
 async def get_games_by_season_async(season_id: int, tournament_id: int, transform_data: bool = False):
+    """Agenda extração assíncrona dos jogos de uma temporada específica.
+
+    Parâmetros de rota:
+    - tournament_id: id do torneio no SofaScore.
+    - season_id: id da temporada a ser extraída.
+
+    Query param opcional:
+    - transform_data: salva no MongoDB se verdadeiro; só retorna dados se falso.
+    """
     try:
         selected_category = 'stats'
         tournaments = get_tournaments_info()
@@ -202,6 +232,16 @@ async def get_games_by_season_async(season_id: int, tournament_id: int, transfor
 
 @app.post("/async/games")
 async def get_all_games_async(slug_tournament: str, id_tournament: int, country: str,transform_data: bool = False):
+    """Agenda extração assíncrona de todas as temporadas de um torneio.
+
+    Query params obrigatórios:
+    - slug_tournament: slug do torneio.
+    - id_tournament: id numérico do torneio.
+    - country: país presente na URL do torneio.
+
+    Query param opcional:
+    - transform_data: salva no MongoDB se verdadeiro; só retorna dados se falso.
+    """
     task = extract_all_games_task.delay(slug_tournament, id_tournament, country, transform_data)
     return {
         "task_id": task.id,
@@ -217,6 +257,7 @@ async def get_all_games_async(slug_tournament: str, id_tournament: int, country:
 
 @app.get("/tasks/{task_id}")
 async def get_task_status(task_id: str):
+    """Consulta o estado atual de uma task Celery pelo id."""
     task_result = AsyncResult(task_id, app=celery_app)
     
     if task_result.state == 'PENDING':
@@ -255,9 +296,7 @@ async def get_task_status(task_id: str):
 
 @app.delete("/tasks/{task_id}")
 async def cancel_task(task_id: str):
-    """
-    Cancela uma task em background.
-    """
+    """Cancela uma task em background, solicitando encerramento imediato."""
     task_result = AsyncResult(task_id, app=celery_app)
     task_result.revoke(terminate=True)
     
