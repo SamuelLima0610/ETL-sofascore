@@ -11,10 +11,10 @@ class Load:
         user = os.getenv('USER_DB')
         collection = os.getenv('MONGODB_COLLECTION')
         self.client = MongoClient(f"mongodb+srv://{user}:{password}@cluster.bmwwbf1.mongodb.net/?appName=Cluster")
-        database = self.client.get_database('Statistics')
-        self.collection = database.get_collection(collection)
+        self.database = self.client.get_database('Statistics')
 
-    def insert_data(self, data):
+    def insert_data(self, data, collection):
+        self.collection = self.database.get_collection(collection)
         # Filtra jogos que ainda não existem no banco
         games_to_insert = []
         for game in data:
@@ -33,7 +33,8 @@ class Load:
         if games_to_insert:
             self.collection.insert_many(games_to_insert)
 
-    def read_data(self, query={}):
+    def read_data(self, collection, query={}):
+        self.collection = self.database.get_collection(collection)
         return list(self.collection.find(query))
 
     def desconnect(self):

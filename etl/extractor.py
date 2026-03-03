@@ -6,9 +6,9 @@ class Extractor:
     def __init__(self):
         self.session = requests.Session()
 
-    def get_football_tournaments(self):
+    def get_tournaments(self, category="football"):
         self.session.get("https://www.sofascore.com/pt/")
-        response = self.session.get("https://www.sofascore.com/api/v1/config/default-unique-tournaments/BR/football")
+        response = self.session.get(f"https://www.sofascore.com/api/v1/config/default-unique-tournaments/BR/{category}")
         data = response.json()
         tournaments = []
         for tournament in data['uniqueTournaments']:
@@ -17,9 +17,10 @@ class Extractor:
             info['slug'] = tournament['slug']
             info['id'] = tournament['id'] 
             info['country'] = tournament['category']['slug']
+            info['category'] = category
             tournaments.append(info)
         return tournaments
-
+    
     def get_seasons(self, competition_url):
         self.session.get("https://www.sofascore.com/pt/")
         response = self.session.get(competition_url)
@@ -29,42 +30,45 @@ class Extractor:
         seasons = dados["props"]["pageProps"]["initialProps"]["seasons"]
         return seasons
     
-    def __get_game_basic_info(self, game, season_id, round):
-        game_info = {}
-        game_info['season'] = season_id
-        game_info['round'] = round
-        game_info['id'] = game['id']
-        game_info['home_team'] = game['homeTeam']['name']
-        game_info['away_team'] = game['awayTeam']['name']
-        game_info['home_score'] = game['homeScore']['current']
-        game_info['away_score'] = game['awayScore']['current']
-        return game_info
-
     def __get_game_stats(self, game_id):
         response = self.session.get(f"https://www.sofascore.com/api/v1/event/{game_id}/statistics")
         statistics = response.json()
         return statistics['statistics'][0]['groups']
     
-    def get_games_by_season(self, season_id):
+    def get_games_by_season(self, tournament_id, season_id):
+        tag = 'round'
         games = []
-        for round in range(1, 39):
-            response = self.session.get(f"https://www.sofascore.com/api/v1/unique-tournament/325/season/{season_id}/events/round/{round}")
-            data = response.json()
-            for game in data['events']:
-                try:
-                    game_info = self.__get_game_basic_info(game, season_id, round)
-                except KeyError:
-                    continue
-                try:
-                    game_info['stats'] = self.__get_game_stats(game['id'])
-                except (KeyError, IndexError):
-                    game_info['stats'] = None
-                games.append(game_info)
+        index = 1
+        response = self.session.get(f"https://www.sofascore.com/api/v1/unique-tournament/{tournament_id}/season/{season_id}/events/{tag}/{index}")
+        if response.status_code != 200:
+            tag = 'last'
+            index = 0
+        while True:
+            try:
+                response = self.session.get(f"https://www.sofascore.com/api/v1/unique-tournament/{tournament_id}/season/{season_id}/events/{tag}/{index}")
+                if response.status_code != 200:
+                    break
+                data = response.json()
+                for game in data['events']:
+                    game_info = game
+                    if 'current' not in list(game['homeScore'].keys()) and 'current' not in list(game['awayScore'].keys()):
+                        continue
+                    try:
+                        game_info['season_id'] = season_id
+                        game_info['stats'] = self.__get_game_stats(game['id'])
+                        game_info['round'] = index
+                    except (KeyError, IndexError):
+                        game_info['stats'] = None
+                    games.append(game_info)
+                index += 1
+            except Exception as e:
+                print(f"Erro ao extrair jogos para {tag} {index}: {str(e)}")
+                break
         return games
     
     def get_games(self, competition_url):
         games = []
         seasons = self.get_seasons(competition_url)
         for season in seasons:
-            games.extend(self.get_games_by_season(season['id']))
+            games.extend(self.get_games_by_season(season['tournament_id'], season['id']))
         return games

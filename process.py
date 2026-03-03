@@ -50,24 +50,24 @@ def _aggregate(games: list, team_as_home: bool) -> Dict:
         away_score = _to_float(game.get('away_score'))
         outcome = _compute_outcome(home_score, away_score, team_as_home)
         record[outcome] += 1
-
-        for category, items in stats.items():
-            if not isinstance(items, list):
-                continue
-            for item in items:
-                name, home_val, away_val = _extract_entry(item)
-                if not name:
+        for stat in stats:
+            for category, items in stat.items():
+                if not isinstance(items, list):
                     continue
+                for item in items:
+                    name, home_val, away_val = _extract_entry(item)
+                    if not name:
+                        continue
 
-                # Seleciona o valor da equipe e do adversário dependendo se ela é mandante/visitante
-                team_val = home_val if team_as_home else away_val
-                opp_val = away_val if team_as_home else home_val
+                    # Seleciona o valor da equipe e do adversário dependendo se ela é mandante/visitante
+                    team_val = home_val if team_as_home else away_val
+                    opp_val = away_val if team_as_home else home_val
 
-                cat_bucket = accum.setdefault(category, {})
-                stat_bucket = cat_bucket.setdefault(name, {"team_sum": 0.0, "opp_sum": 0.0, "count": 0})
-                stat_bucket["team_sum"] += team_val
-                stat_bucket["opp_sum"] += opp_val
-                stat_bucket["count"] += 1
+                    cat_bucket = accum.setdefault(category, {})
+                    stat_bucket = cat_bucket.setdefault(name, {"team_sum": 0.0, "opp_sum": 0.0, "count": 0})
+                    stat_bucket["team_sum"] += team_val
+                    stat_bucket["opp_sum"] += opp_val
+                    stat_bucket["count"] += 1
 
     averages = {}
     for category, stats_map in accum.items():

@@ -33,10 +33,12 @@ def test_tournaments():
     data = response.json()
     
     print(f"Status: {response.status_code}")
-    print(f"Total de torneios: {len(data['tournaments'])}")
+    print(f"Total de torneios:")
     print(f"\nPrimeiros 3 torneios:")
-    for tournament in data['tournaments'][:3]:
-        print(f"  - ID: {tournament['id']}, Nome: {tournament['name']}")
+    for category in data['tournaments']:
+        print(f"\nCategoria: {category}")
+        for tournament in data['tournaments'][category][:3]:
+            print(f"  - ID: {tournament['id']}, Nome: {tournament['name']}")
 
 def test_seasons():
     """Testa o endpoint de seasons (síncrono)"""
@@ -44,7 +46,7 @@ def test_seasons():
     
     response = requests.get(f"{API_URL}/seasons", params={
         "slug_tournament": "brasileirao-serie-a",
-        "id_tournament": 325,
+        "tournament_id": 325,
         "country": "brazil"
     })
     data = response.json()
@@ -61,7 +63,7 @@ def test_games(season_id):
     """Testa o endpoint de games (síncrono)"""
     print_section(f"6. Obtendo Jogos (Síncrono - Temporada {season_id})")
     
-    response = requests.get(f"{API_URL}/games", params={"season": season_id})
+    response = requests.get(f"{API_URL}/games/football", params={"season": season_id})
     data = response.json()
     
     print(f"Status: {response.status_code}")
@@ -77,7 +79,7 @@ def versus_stats(team_one, team_two):
     """Testa o endpoint de versus (síncrono)"""
     print_section("7. Obtendo Estatísticas de Confronto (Síncrono)")
     
-    response = requests.get(f"{API_URL}/versus", params={
+    response = requests.get(f"{API_URL}/versus/football", params={
         "team_one": team_one,
         "team_two": team_two
     })
@@ -92,7 +94,7 @@ def test_async_extraction(season_id):
     
     # Iniciar a task
     print("Iniciando extração em background...")
-    response = requests.post(f"{API_URL}/async/games/{season_id}?transform_data=true")
+    response = requests.post(f"{API_URL}/async/games/325/{season_id}?transform_data=true")
     data = response.json()
     
     task_id = data['task_id']

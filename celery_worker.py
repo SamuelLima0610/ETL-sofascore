@@ -41,7 +41,7 @@ celery_app.conf.update(
 )
 
 @celery_app.task(bind=True, name='extract_games_by_season')
-def extract_games_by_season_task(self, season_id: int, transform_data: bool = False):
+def extract_games_by_season_task(self, season_id: int, tournament_id: int, transform_data: bool = False, collection: str = "games"):
     try:
         # Atualiza progresso
         self.update_state(state='PROGRESS', meta={'current': 0, 'total': 38, 'status': 'Iniciando extração...'})
@@ -51,22 +51,22 @@ def extract_games_by_season_task(self, season_id: int, transform_data: bool = Fa
         self.update_state(state='PROGRESS', meta={'current': 1, 'total': 38, 'status': 'Extractor inicializado'})
         
         # Extrai jogos
-        games = extractor.get_games_by_season(season_id)
+        games = extractor.get_games_by_season(tournament_id, season_id)
         self.update_state(state='PROGRESS', meta={'current': 35, 'total': 38, 'status': f'{len(games)} jogos extraídos'})
         
         # Aplica transformações se necessário
         if transform_data and games:
-            transformer = Transform(games)
+            transformer = Transform(games, tournament_id)
             games = transformer.transform()
             self.update_state(state='PROGRESS', meta={'current': 36, 'total': 38, 'status': 'Dados transformados'})
             
             # Salva no MongoDB
             loader = Load()
-            games_saved = loader.read_data({'season': season_id})
+            games_saved = loader.read_data(collection, {'season': season_id, 'tournament_id': tournament_id})
             if len(games_saved) == len(games):
                 self.update_state(state='PROGRESS', meta={'current': 37, 'total': 38, 'status': 'Dados já existem no MongoDB'})
             else:
-                loader.insert_data(games)
+                loader.insert_data(games, collection)
                 self.update_state(state='PROGRESS', meta={'current': 37, 'total': 38, 'status': 'Dados salvos no MongoDB'})
             loader.desconnect()
             
@@ -85,14 +85,14 @@ def extract_games_by_season_task(self, season_id: int, transform_data: bool = Fa
 
 
 @celery_app.task(bind=True, name='extract_all_games')
-def extract_all_games_task(self, slug_tournament: str, id_tournament: int, country: str = "brazil",transform_data: bool = False):
+def extract_all_games_task(self, slug_tournament: str, tournament_id: int, country: str = "brazil",transform_data: bool = False):
     try:
         # Atualiza progresso
         self.update_state(state='PROGRESS', meta={'current': 0, 'total': 100, 'status': 'Iniciando extração...'})
         
         # Inicializa extractor
         extractor = Extractor()
-        competition_url = f"https://www.sofascore.com/pt/football/tournament/{country}/{slug_tournament}/{id_tournament}"
+        competition_url = f"https://www.sofascore.com/pt/football/tournament/{country}/{slug_tournament}/{tournament_id}"
         seasons = extractor.get_seasons(competition_url)
         total_seasons = len(seasons)
         
@@ -119,7 +119,7 @@ def extract_all_games_task(self, slug_tournament: str, id_tournament: int, count
         
         # Aplica transformações se necessário
         if transform_data and games:
-            transformer = Transform(games)
+            transformer = Transform(games, tournament_id)
             games = transformer.transform()
             self.update_state(state='PROGRESS', meta={'current': 92, 'total': 100, 'status': 'Dados transformados'})
             

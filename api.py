@@ -73,26 +73,40 @@ async def health_check():
         "celery_ready": celery_app.control.inspect().ping() is not None
     }
 
+def get_tournaments_info():
+    categories = ["football", "basketball", "volleyball", "tennis", "american-football"]  # Podemos expandir para outros esportes no futuro
+    if extractor is None:
+        raise HTTPException(status_code=503, detail="Extractor não inicializado")
+    # Construir a URL da competição com base nos parâmetros
+    tournaments = {}
+    for category in categories:
+        try:
+            tournaments_list = extractor.get_tournaments(category)
+            if tournaments_list:
+                tournaments[category] = tournaments_list
+        except Exception as e:
+            print(f"Erro ao buscar torneios para categoria '{category}': {str(e)}")
+    return tournaments
+
 @app.get("/tournaments")
 async def get_tournaments():
     if extractor is None:
         raise HTTPException(status_code=503, detail="Extractor não inicializado")
     # Construir a URL da competição com base nos parâmetros
-    return {"tournaments": extractor.get_football_tournaments()}
+    return {"tournaments": get_tournaments_info()}
 
 
 @app.get("/seasons")
-async def get_seasons(slug_tournament: str, id_tournament: int, country: str):
-    
+async def get_seasons(slug_tournament: str, tournament_id: int, country: str):
     if extractor is None:
         raise HTTPException(status_code=503, detail="Extractor não inicializado")
     # Construir a URL da competição com base nos parâmetros
-    competition_url = f"https://www.sofascore.com/pt/football/tournament/{country}/{slug_tournament}/{id_tournament}"
+    competition_url = f"https://www.sofascore.com/pt/football/tournament/{country}/{slug_tournament}/{tournament_id}"
     
     return {"seasons": extractor.get_seasons(competition_url)}
 
-@app.get("/games")
-async def get_games(request: Request):
+@app.get("/games/{category}")
+async def get_games(category: str, request: Request):
     """
     Endpoint para buscar jogos com filtros dinâmicos.
     Aceita qualquer combinação de parâmetros de filtro via query params.
@@ -121,7 +135,7 @@ async def get_games(request: Request):
             filters[key] = value
     
     try:
-        games = load.read_data(query=filters)
+        games = load.read_data(category, query=filters)
         
         # Remove o campo _id do MongoDB para serialização JSON
         for game in games:
@@ -136,14 +150,14 @@ async def get_games(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar jogos: {str(e)}")
 
-@app.get("/versus")
-async def get_versus_stats(team_one: str, team_two: str):
+@app.get("/versus/{category}")
+async def get_versus_stats(category: str, team_one: str, team_two: str):
     
     if extractor is None:
         raise HTTPException(status_code=503, detail="Extractor não inicializado")
     
-    at_house = load.read_data(query={"home_team": team_one, "away_team": team_two})
-    at_away = load.read_data(query={"home_team": team_two, "away_team": team_one})
+    at_house = load.read_data(category, query={"home_team": team_one, "away_team": team_two})
+    at_away = load.read_data(category, query={"home_team": team_two, "away_team": team_one})
 
     return process.get_versus_stats(at_house, at_away)
 
@@ -161,16 +175,29 @@ async def get_seasons_async():
     }
 
 
-@app.post("/async/games/{season_id}")
-async def get_games_by_season_async(season_id: int, transform_data: bool = False):
-    task = extract_games_by_season_task.delay(season_id, transform_data)
-    return {
-        "task_id": task.id,
-        "season_id": season_id,
-        "transform_data": transform_data,
-        "status": "processing",
-        "message": f"Task iniciada. {'Dados serão salvos no MongoDB.' if transform_data else 'Dados não serão salvos.'} Use GET /tasks/{{task_id}} para verificar o status"
-    }
+@app.post("/async/games/{tournament_id}/{season_id}")
+async def get_games_by_season_async(season_id: int, tournament_id: int, transform_data: bool = False):
+    try:
+        selected_category = 'stats'
+        tournaments = get_tournaments_info()
+        # Busca o torneio pelo id fornecido e guarda também a categoria em que ele foi encontrado
+        for category_name, tournaments_list in tournaments.items():
+            for tournament in tournaments_list:
+                if tournament.get('id') == tournament_id:
+                    selected_category = category_name
+                    break
+        task = extract_games_by_season_task.delay(season_id, tournament_id, transform_data, selected_category)
+        return {
+            "task_id": task.id,
+            "season_id": season_id,
+            "tournament_id": tournament_id,
+            "transform_data": transform_data,
+            "category": selected_category,
+            "status": "processing",
+            "message": f"Task iniciada. {'Dados serão salvos no MongoDB.' if transform_data else 'Dados não serão salvos.'} Use GET /tasks/{{task_id}} para verificar o status"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao iniciar extração: {str(e)}")
 
 
 @app.post("/async/games")
