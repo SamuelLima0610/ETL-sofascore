@@ -60,21 +60,22 @@ celery -A celery_worker.celery_app flower --port=5555
 ## Endpoints principais
 
 - `GET /` — metadados e links
+- `GET /health` — health check
 - `GET /tournaments` — lista torneios
-- `GET /seasons` — obter temporadas (query params: `slug_tournament`, `id_tournament`, `country`)
- - `GET /seasons` — obter temporadas (query params: `slug_tournament`, `id_tournament`, `country`)
- - `GET /games` — buscar jogos persistidos (query params dinâmicos)
+- `GET /seasons` — obter temporadas (query params: `slug_tournament`, `tournament_id`, `country`)
+- `GET /games/{category}` — buscar jogos persistidos (query params dinâmicos)
+- `GET /versus/{category}` — confronto direto entre duas equipes
 
-GET `/games` — detalhes rápidos
+GET `/games/{category}` — detalhes rápidos
 
 Aceita filtros via query params (por exemplo: `season`, `round`, `home_team`, `away_team`). Valores numéricos são convertidos automaticamente. Se nenhum filtro for passado, retorna todos os jogos persistidos.
 
 Exemplo:
 
 ```bash
-curl "http://localhost:8000/games?season=58766&home_team=Flamengo"
+curl "http://localhost:8000/games/football?season=58766&home_team=Flamengo"
 ```
-- `POST /async/games/{season_id}` — inicia extração de uma temporada em background
+- `POST /async/games/{tournament_id}/{season_id}` — inicia extração de uma temporada em background
 - `POST /async/games` — inicia extração de todas as temporadas (recebe `slug_tournament`, `id_tournament`, `country` como query params)
 - `GET /tasks/{task_id}` — consultar status/result
 - `DELETE /tasks/{task_id}` — cancelar task
@@ -84,13 +85,13 @@ curl "http://localhost:8000/games?season=58766&home_team=Flamengo"
 Iniciar extração de uma temporada (não salva no MongoDB):
 
 ```bash
-curl -X POST "http://localhost:8000/async/games/58766?transform_data=false"
+curl -X POST "http://localhost:8000/async/games/325/58766?transform_data=false"
 ```
 
 Iniciar extração de uma temporada (salva no MongoDB):
 
 ```bash
-curl -X POST "http://localhost:8000/async/games/58766?transform_data=true"
+curl -X POST "http://localhost:8000/async/games/325/58766?transform_data=true"
 ```
 
 Consultar status de task:

@@ -61,11 +61,13 @@ celery -A celery_worker.celery_app flower --port=5555
 ## API e endpoints principais
 
 - `GET /` : informações básicas e links para docs
-- `GET /tournaments` : retorna torneios (usa `etl/extractor.py`)
-- `GET /seasons` : obter temporadas (query params: `slug_tournament`, `id_tournament`, `country`)
--- `GET /health` : health check
+- `GET /health` : health check
+- `GET /tournaments` : retorna torneios por categoria
+- `GET /seasons` : obter temporadas (query params: `slug_tournament`, `tournament_id`, `country`)
+- `GET /games/{category}` : buscar jogos persistidos com filtros dinâmicos
+- `GET /versus/{category}` : estatísticas de confronto direto entre duas equipes
 
-GET `/games` — buscar jogos persistidos
+GET `/games/{category}` — buscar jogos persistidos
 
 Esse endpoint retorna os jogos já persistidos (MongoDB) e aceita filtros dinâmicos via query params. Exemplos de filtros suportados:
 
@@ -83,7 +85,7 @@ Comportamento:
 Exemplo (curl):
 
 ```bash
-curl "http://localhost:8000/games?season=58766&round=10&home_team=Flamengo"
+curl "http://localhost:8000/games/football?season=58766&round=10&home_team=Flamengo"
 ```
 
 Resposta (exemplo):
@@ -98,7 +100,7 @@ Resposta (exemplo):
 
 - Async (via Celery):
   - `POST /async/seasons`
-  - `POST /async/games/{season_id}`?transform_data=true|false
+  - `POST /async/games/{tournament_id}/{season_id}`?transform_data=true|false
   - `POST /async/games` (query params: `slug_tournament`, `id_tournament`, `country`, `transform_data`)
   - `GET /tasks/{task_id}` : status da task
   - `DELETE /tasks/{task_id}` : cancelar task

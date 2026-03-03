@@ -15,7 +15,7 @@ curl http://localhost:8000/tournaments
 
 ## 3. Buscar jogos salvos (filtros)
 
-O endpoint `GET /games` permite enviar filtros via query params. Alguns filtros comuns:
+O endpoint `GET /games/{category}` permite enviar filtros via query params. Alguns filtros comuns:
 
 - `season` (int)
 - `round` (int)
@@ -25,7 +25,7 @@ O endpoint `GET /games` permite enviar filtros via query params. Alguns filtros 
 Exemplo:
 
 ```bash
-curl "http://localhost:8000/games?season=58766&round=10&home_team=Flamengo"
+curl "http://localhost:8000/games/football?season=58766&round=10&home_team=Flamengo"
 ```
 
 Resposta (resumo):
@@ -45,10 +45,10 @@ Observações:
 
 ## 3. Obter Temporadas (síncrono)
 
-Repare que `GET /seasons` exige query params: `slug_tournament`, `id_tournament`, `country`.
+Repare que `GET /seasons` exige query params: `slug_tournament`, `tournament_id`, `country`.
 
 ```bash
-curl "http://localhost:8000/seasons?slug_tournament=brasileiro-serie-a&id_tournament=325&country=brazil"
+curl "http://localhost:8000/seasons?slug_tournament=brasileirao-serie-a&tournament_id=325&country=brazil"
 ```
 
 ## 4. Extração Assíncrona de uma Temporada
@@ -56,8 +56,8 @@ curl "http://localhost:8000/seasons?slug_tournament=brasileiro-serie-a&id_tourna
 ### Iniciar a extração
 
 ```bash
-# Substitua 58766 pelo ID da temporada desejada
-curl -X POST "http://localhost:8000/async/games/58766?transform_data=false"
+# Substitua 325 pelo ID do torneio e 58766 pelo ID da temporada desejada
+curl -X POST "http://localhost:8000/async/games/325/58766?transform_data=false"
 ```
 
 ### Verificar o status da task
@@ -69,13 +69,13 @@ curl http://localhost:8000/tasks/<task_id>
 ## 5. Extração Assíncrona (todas as temporadas de um torneio)
 
 ```bash
-curl -X POST "http://localhost:8000/async/games?slug_tournament=brasileiro-serie-a&id_tournament=325&country=brazil&transform_data=false"
+curl -X POST "http://localhost:8000/async/games?slug_tournament=brasileirao-serie-a&id_tournament=325&country=brazil&transform_data=false"
 ```
 
 ## 6. Script de monitoramento (exemplo)
 
 ```bash
-TASK_ID=$(curl -s -X POST "http://localhost:8000/async/games/58766?transform_data=false" | jq -r '.task_id')
+TASK_ID=$(curl -s -X POST "http://localhost:8000/async/games/325/58766?transform_data=false" | jq -r '.task_id')
 while true; do
   STATUS=$(curl -s http://localhost:8000/tasks/$TASK_ID)
   echo $STATUS | jq '.'
