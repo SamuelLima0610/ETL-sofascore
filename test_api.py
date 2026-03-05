@@ -140,6 +140,74 @@ def test_async_extraction(season_id):
     return task_id
 
 
+def test_async_games():
+    """Testa extração assíncrona de todas as temporadas de um torneio"""
+    print_section("8. Extração Assíncrona de Todas as Temporadas")
+    
+    # Parâmetros para o torneio de tênis (pode ser alterado para outro torneio)
+    slug_tournament = "tennis"
+    id_tournament = 2480
+    country = "atp"
+    transform_data = True  # Salvar no MongoDB durante o teste
+    
+    # Iniciar a task
+    print(f"Iniciando extração de todas as temporadas de {slug_tournament}...")
+    response = requests.post(
+        f"{API_URL}/async/games",
+        params={
+            "slug_tournament": slug_tournament,
+            "tournament_id": id_tournament,
+            "country": country,
+            "transform_data": transform_data
+        }
+    )
+    data = response.json()
+    
+    task_id = data['task_id']
+    print(f"✅ Task iniciada: {task_id}\n")
+    
+    # Monitorar o progresso
+    print("Monitorando progresso...")
+    max_attempts = 2400  # 1200 tentativas = ~80 minutos (pode levar mais tempo)
+    attempt = 0
+    
+    while attempt < max_attempts:
+        time.sleep(2)  # Aguardar 2 segundos
+        
+        response = requests.get(f"{API_URL}/tasks/{task_id}")
+        task_data = response.json()
+        
+        state = task_data['state']
+        print(f"  [{attempt+1}/{max_attempts}] Estado: {state}", end="")
+        
+        if state == "PROGRESS":
+            progress = task_data.get('progress', {})
+            current = progress.get('current', 0)
+            total = progress.get('total', 0)
+            status = progress.get('status', '')
+            print(f" - {current}/{total} - {status}")
+        elif state == "SUCCESS":
+            print(" - ✅ Concluído!")
+            result = task_data['result']
+            print(f"\nResultado:")
+            print(f"  - Total de temporadas processadas: {result.get('seasons_processed', 'N/A')}")
+            print(f"  - Total de jogos extraídos: {result.get('total_games', 0)}")
+            if result.get('seasons_data'):
+                print(f"  - Temporadas: {len(result['seasons_data'])}")
+            return task_id
+        elif state == "FAILURE":
+            print(" - ❌ Erro!")
+            print(f"  Erro: {task_data.get('error', 'Desconhecido')}")
+            return None
+        else:
+            print()
+        
+        attempt += 1
+    
+    print("\n⚠️  Timeout atingido")
+    return task_id
+
+
 def test_get_result(task_id):
     """Obtém o resultado de uma task"""
     print_section(f"5. Obtendo Resultado (Task {task_id})")
@@ -194,6 +262,12 @@ def main():
 
         #Versus
         versus_stats("Flamengo", "Palmeiras")
+
+        # Teste assíncrono de todas as temporadas (comentado por padrão por ser demorado)
+        print("\n⚠️  Deseja testar a extração de TODAS as temporadas? (pode demorar muito)")
+        resposta = input("Digite 'sim' para continuar: ")
+        if resposta.lower() == 'sim':
+            test_async_games()
 
         print_section("✅ Testes Concluídos")
         print("\nPara mais informações, acesse:")

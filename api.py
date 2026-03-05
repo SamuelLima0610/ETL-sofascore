@@ -89,6 +89,14 @@ def get_tournaments_info():
             print(f"Erro ao buscar torneios para categoria '{category}': {str(e)}")
     return tournaments
 
+def get_category_by_tournament_id(tournament_id):
+    tournaments = get_tournaments_info()
+    for category_name, tournaments_list in tournaments.items():
+        for tournament in tournaments_list:
+            if tournament.get('id') == tournament_id:
+                return category_name
+    return None
+
 @app.get("/tournaments")
 async def get_tournaments():
     """Lista torneios disponíveis para cada categoria esportiva suportada."""
@@ -208,14 +216,10 @@ async def get_games_by_season_async(season_id: int, tournament_id: int, transfor
     - transform_data: salva no MongoDB se verdadeiro; só retorna dados se falso.
     """
     try:
-        selected_category = 'stats'
-        tournaments = get_tournaments_info()
         # Busca o torneio pelo id fornecido e guarda também a categoria em que ele foi encontrado
-        for category_name, tournaments_list in tournaments.items():
-            for tournament in tournaments_list:
-                if tournament.get('id') == tournament_id:
-                    selected_category = category_name
-                    break
+        selected_category = get_category_by_tournament_id(tournament_id)
+        if selected_category is None:
+            selected_category = 'stats'
         task = extract_games_by_season_task.delay(season_id, tournament_id, transform_data, selected_category)
         return {
             "task_id": task.id,
@@ -231,7 +235,7 @@ async def get_games_by_season_async(season_id: int, tournament_id: int, transfor
 
 
 @app.post("/async/games")
-async def get_all_games_async(slug_tournament: str, id_tournament: int, country: str,transform_data: bool = False):
+async def get_all_games_async(slug_tournament: str, tournament_id: int, country: str,transform_data: bool = False, length_tournaments: int = None):
     """Agenda extração assíncrona de todas as temporadas de um torneio.
 
     Query params obrigatórios:
@@ -242,7 +246,14 @@ async def get_all_games_async(slug_tournament: str, id_tournament: int, country:
     Query param opcional:
     - transform_data: salva no MongoDB se verdadeiro; só retorna dados se falso.
     """
-    task = extract_all_games_task.delay(slug_tournament, id_tournament, country, transform_data)
+    selected_category = get_category_by_tournament_id(tournament_id)
+    if selected_category is None:
+        selected_category = 'stats'
+    task = extract_all_games_task.delay(slug_tournament, 
+                                        tournament_id, 
+                                        country, transform_data, 
+                                        collection=selected_category,
+                                        length_tournaments=length_tournaments)
     return {
         "task_id": task.id,
         "transform_data": transform_data,

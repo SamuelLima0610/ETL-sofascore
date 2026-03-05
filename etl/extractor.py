@@ -45,7 +45,7 @@ class Extractor:
             index = 0
         while True:
             try:
-                response = self.session.get(f"https://www.sofascore.com/api/v1/unique-tournament/{tournament_id}/season/{season_id}/events/{tag}/{index}")
+                response = self.session.get(f"https://www.sofascore.com/api/v1/unique-tournament/{tournament_id}/season/{season_id}/events/last/{index}")
                 if response.status_code != 200:
                     break
                 data = response.json()
@@ -64,11 +64,4 @@ class Extractor:
             except Exception as e:
                 print(f"Erro ao extrair jogos para {tag} {index}: {str(e)}")
                 break
-        return games
-    
-    def get_games(self, competition_url):
-        games = []
-        seasons = self.get_seasons(competition_url)
-        for season in seasons:
-            games.extend(self.get_games_by_season(season['tournament_id'], season['id']))
         return games

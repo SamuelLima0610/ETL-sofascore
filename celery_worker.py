@@ -85,13 +85,15 @@ def extract_games_by_season_task(self, season_id: int, tournament_id: int, trans
 
 
 @celery_app.task(bind=True, name='extract_all_games')
-def extract_all_games_task(self, slug_tournament: str, tournament_id: int, country: str = "brazil",transform_data: bool = False):
+def extract_all_games_task(self, slug_tournament: str, tournament_id: int, country: str = "brazil",transform_data: bool = False, collection: str = "games", length_tournaments: int = None):
     try:
         # Atualiza progresso
         self.update_state(state='PROGRESS', meta={'current': 0, 'total': 100, 'status': 'Iniciando extração...'})
         
         # Inicializa extractor
         extractor = Extractor()
+        loader = Load()
+        
         competition_url = f"https://www.sofascore.com/pt/football/tournament/{country}/{slug_tournament}/{tournament_id}"
         seasons = extractor.get_seasons(competition_url)
         total_seasons = len(seasons)
@@ -104,9 +106,23 @@ def extract_all_games_task(self, slug_tournament: str, tournament_id: int, count
                 'status': f'Encontradas {total_seasons} temporadas. Iniciando extração...'
             }
         )
-        
-        # Extrai jogos
-        games = extractor.get_games()
+        if length_tournaments is not None:
+            seasons = seasons[:length_tournaments]
+            total_seasons = len(seasons)
+            self.update_state(
+                state='PROGRESS', 
+                meta={
+                    'current': 5, 
+                    'total': 100, 
+                    'status': f'Limitando a {total_seasons} temporadas para pesquisar...'
+                }
+            )
+        games = []
+        for season in seasons:
+            extracted_games = extractor.get_games_by_season(tournament_id, season['id'])
+            games_saved = loader.read_data(collection, {'season': season['id'], 'tournament_id': tournament_id})
+            if len(games_saved) != len(extracted_games):
+                games.extend(extracted_games)
         
         self.update_state(
             state='PROGRESS', 
@@ -123,9 +139,7 @@ def extract_all_games_task(self, slug_tournament: str, tournament_id: int, count
             games = transformer.transform()
             self.update_state(state='PROGRESS', meta={'current': 92, 'total': 100, 'status': 'Dados transformados'})
             
-            # Salva no MongoDB
-            loader = Load()
-            loader.insert_data(games)
+            loader.insert_data(games, collection)
             loader.desconnect()
             self.update_state(state='PROGRESS', meta={'current': 95, 'total': 100, 'status': 'Dados salvos no MongoDB'})
             
