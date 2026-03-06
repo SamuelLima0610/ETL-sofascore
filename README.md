@@ -100,12 +100,16 @@ Resposta (exemplo):
 
 - Async (via Celery):
   - `POST /async/seasons`
-  - `POST /async/games/{tournament_id}/{season_id}`?transform_data=true|false
-  - `POST /async/games` (query params: `slug_tournament`, `id_tournament`, `country`, `transform_data`)
+  - `POST /async/games/season` (body JSON: `tournament_id`, `season_id`)
+  - `POST /async/games` (body JSON: `slug_tournament`, `tournament_id`, `country`, `length_tournaments` opcional com IDs de temporada)
   - `GET /tasks/{task_id}` : status da task
   - `DELETE /tasks/{task_id}` : cancelar task
 
 Docs auto geradas (Swagger): `http://localhost:8000/docs`
+
+## Limitações observadas
+
+- Após aproximadamente 4.000 partidas inseridas em sequência, a API pública do SofaScore costuma bloquear temporariamente o IP de origem. Caso precise processar volumes maiores, considere pausar o pipeline, alternar o endereço IP (VPN/proxy) ou distribuir a carga em janelas menores para evitar o rate limit.
 
 ## Estrutura relevante
 

@@ -4,6 +4,7 @@ from etl.transform import Transform
 from etl.load import Load
 from dotenv import load_dotenv
 import os
+from typing import List, Optional, Union
 
 load_dotenv()
 
@@ -41,7 +42,7 @@ celery_app.conf.update(
 )
 
 @celery_app.task(bind=True, name='extract_games_by_season')
-def extract_games_by_season_task(self, season_id: int, tournament_id: int, transform_data: bool = False, collection: str = "games"):
+def extract_games_by_season_task(self, season_id: int, tournament_id: int, collection: str = "games"):
     try:
         # Atualiza progresso
         self.update_state(state='PROGRESS', meta={'current': 0, 'total': 38, 'status': 'Iniciando extração...'})
@@ -55,7 +56,7 @@ def extract_games_by_season_task(self, season_id: int, tournament_id: int, trans
         self.update_state(state='PROGRESS', meta={'current': 35, 'total': 38, 'status': f'{len(games)} jogos extraídos'})
         
         # Aplica transformações se necessário
-        if transform_data and games:
+        if games:
             transformer = Transform(games, tournament_id)
             games = transformer.transform()
             self.update_state(state='PROGRESS', meta={'current': 36, 'total': 38, 'status': 'Dados transformados'})
@@ -85,7 +86,14 @@ def extract_games_by_season_task(self, season_id: int, tournament_id: int, trans
 
 
 @celery_app.task(bind=True, name='extract_all_games')
-def extract_all_games_task(self, slug_tournament: str, tournament_id: int, country: str = "brazil",transform_data: bool = False, collection: str = "games", length_tournaments: int = None):
+def extract_all_games_task(
+    self,
+    slug_tournament: str,
+    tournament_id: int,
+    country: str = "brazil",
+    collection: str = "games",
+    length_tournaments: Optional[Union[int, List[int]]] = None
+):
     try:
         # Atualiza progresso
         self.update_state(state='PROGRESS', meta={'current': 0, 'total': 100, 'status': 'Iniciando extração...'})
@@ -107,16 +115,29 @@ def extract_all_games_task(self, slug_tournament: str, tournament_id: int, count
             }
         )
         if length_tournaments is not None:
-            seasons = seasons[:length_tournaments]
-            total_seasons = len(seasons)
-            self.update_state(
-                state='PROGRESS', 
-                meta={
-                    'current': 5, 
-                    'total': 100, 
-                    'status': f'Limitando a {total_seasons} temporadas para pesquisar...'
-                }
-            )
+            if isinstance(length_tournaments, list):
+                allowed_ids = set(length_tournaments)
+                seasons = [season for season in seasons if season['id'] in allowed_ids]
+                total_seasons = len(seasons)
+                self.update_state(
+                    state='PROGRESS',
+                    meta={
+                        'current': 5,
+                        'total': 100,
+                        'status': f'Filtrando para {total_seasons} temporadas específicas...'
+                    }
+                )
+            else:
+                seasons = seasons[:length_tournaments]
+                total_seasons = len(seasons)
+                self.update_state(
+                    state='PROGRESS', 
+                    meta={
+                        'current': 5, 
+                        'total': 100, 
+                        'status': f'Limitando a {total_seasons} temporadas para pesquisar...'
+                    }
+                )
         games = []
         for season in seasons:
             extracted_games = extractor.get_games_by_season(tournament_id, season['id'])
@@ -134,7 +155,7 @@ def extract_all_games_task(self, slug_tournament: str, tournament_id: int, count
         )
         
         # Aplica transformações se necessário
-        if transform_data and games:
+        if games:
             transformer = Transform(games, tournament_id)
             games = transformer.transform()
             self.update_state(state='PROGRESS', meta={'current': 92, 'total': 100, 'status': 'Dados transformados'})

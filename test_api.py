@@ -94,7 +94,11 @@ def test_async_extraction(season_id):
     
     # Iniciar a task
     print("Iniciando extração em background...")
-    response = requests.post(f"{API_URL}/async/games/325/{season_id}?transform_data=true")
+    payload = {
+        "tournament_id": 325,
+        "season_id": season_id
+    }
+    response = requests.post(f"{API_URL}/async/games/season", json=payload)
     data = response.json()
     
     task_id = data['task_id']
@@ -144,22 +148,22 @@ def test_async_games():
     """Testa extração assíncrona de todas as temporadas de um torneio"""
     print_section("8. Extração Assíncrona de Todas as Temporadas")
     
-    # Parâmetros para o torneio de tênis (pode ser alterado para outro torneio)
-    slug_tournament = "tennis"
-    id_tournament = 2480
-    country = "atp"
-    transform_data = True  # Salvar no MongoDB durante o teste
-    
+    # Parâmetros para o torneio de basquete (pode ser alterado para outro torneio)
+    slug_tournament = "basketball"
+    id_tournament = 132
+    country = "usa"
+    payload = {
+        "slug_tournament": slug_tournament,
+        "tournament_id": id_tournament,
+        "country": country
+    }
+    payload["length_tournaments"] = [80229, 65360]  # Opcional: limite por IDs de temporada
+
     # Iniciar a task
     print(f"Iniciando extração de todas as temporadas de {slug_tournament}...")
     response = requests.post(
         f"{API_URL}/async/games",
-        params={
-            "slug_tournament": slug_tournament,
-            "tournament_id": id_tournament,
-            "country": country,
-            "transform_data": transform_data
-        }
+        json=payload
     )
     data = response.json()
     

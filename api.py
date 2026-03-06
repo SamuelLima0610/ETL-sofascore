@@ -13,6 +13,8 @@ from celery_worker import (
 )
 from celery.result import AsyncResult
 
+from schemas.extraction_schema import AllSeasonsExtractionRequest, SeasonExtractionRequest
+
 # Instâncias globais (inicializadas no lifespan)
 extractor = None
 load = None
@@ -56,7 +58,7 @@ async def root():
         "docs": "/docs",
         "endpoints": {
             "sync": ["/seasons", "/health", "/games"],
-            "async": ["/async/seasons", "/async/games/{season_id}", "/async/games"],
+            "async": ["/async/seasons", "/async/games/season", "/async/games"],
             "status": ["/tasks/{task_id}"]
         }
     }
@@ -204,61 +206,61 @@ async def get_seasons_async():
     }
 
 
-@app.post("/async/games/{tournament_id}/{season_id}")
-async def get_games_by_season_async(season_id: int, tournament_id: int, transform_data: bool = False):
+@app.post("/async/games/season")
+async def get_games_by_season_async(payload: SeasonExtractionRequest):
     """Agenda extração assíncrona dos jogos de uma temporada específica.
 
-    Parâmetros de rota:
-    - tournament_id: id do torneio no SofaScore.
+    Corpo (JSON):
     - season_id: id da temporada a ser extraída.
-
-    Query param opcional:
-    - transform_data: salva no MongoDB se verdadeiro; só retorna dados se falso.
+    - tournament_id: id do torneio a que a temporada pertence.
     """
     try:
+        season_id = payload.season_id
+        tournament_id = payload.tournament_id
         # Busca o torneio pelo id fornecido e guarda também a categoria em que ele foi encontrado
         selected_category = get_category_by_tournament_id(tournament_id)
         if selected_category is None:
             selected_category = 'stats'
-        task = extract_games_by_season_task.delay(season_id, tournament_id, transform_data, selected_category)
+        task = extract_games_by_season_task.delay(season_id, tournament_id, selected_category)
         return {
             "task_id": task.id,
             "season_id": season_id,
             "tournament_id": tournament_id,
-            "transform_data": transform_data,
             "category": selected_category,
             "status": "processing",
-            "message": f"Task iniciada. {'Dados serão salvos no MongoDB.' if transform_data else 'Dados não serão salvos.'} Use GET /tasks/{{task_id}} para verificar o status"
+            "message": f"Task iniciada. Dados serão salvos no MongoDB. Use GET /tasks/{{task_id}} para verificar o status"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao iniciar extração: {str(e)}")
 
 
 @app.post("/async/games")
-async def get_all_games_async(slug_tournament: str, tournament_id: int, country: str,transform_data: bool = False, length_tournaments: int = None):
+async def get_all_games_async(payload: AllSeasonsExtractionRequest):
     """Agenda extração assíncrona de todas as temporadas de um torneio.
 
-    Query params obrigatórios:
+    Corpo (JSON):
     - slug_tournament: slug do torneio.
-    - id_tournament: id numérico do torneio.
+    - tournament_id: id numérico do torneio.
     - country: país presente na URL do torneio.
-
-    Query param opcional:
-    - transform_data: salva no MongoDB se verdadeiro; só retorna dados se falso.
+    - length_tournaments (opcional): lista com IDs de temporada a serem processados.
     """
+    slug_tournament = payload.slug_tournament
+    tournament_id = payload.tournament_id
+    country = payload.country
+    length_tournaments = payload.length_tournaments
+
     selected_category = get_category_by_tournament_id(tournament_id)
     if selected_category is None:
         selected_category = 'stats'
     task = extract_all_games_task.delay(slug_tournament, 
                                         tournament_id, 
-                                        country, transform_data, 
+                                        country,
                                         collection=selected_category,
                                         length_tournaments=length_tournaments)
     return {
         "task_id": task.id,
-        "transform_data": transform_data,
         "status": "processing",
-        "message": f"Task iniciada. Esta operação pode demorar. {'Dados serão salvos no MongoDB.' if transform_data else 'Dados não serão salvos.'} Use GET /tasks/{{task_id}} para verificar o status"
+        "message": f"Task iniciada. Esta operação pode demorar. Dados serão salvos no MongoDB. Use GET /tasks/{{task_id}} para verificar o status"
     }
 
 

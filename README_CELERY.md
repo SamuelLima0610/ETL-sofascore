@@ -75,8 +75,8 @@ Exemplo:
 ```bash
 curl "http://localhost:8000/games/football?season=58766&home_team=Flamengo"
 ```
-- `POST /async/games/{tournament_id}/{season_id}` — inicia extração de uma temporada em background
-- `POST /async/games` — inicia extração de todas as temporadas (recebe `slug_tournament`, `id_tournament`, `country` como query params)
+- `POST /async/games/season` — inicia extração de uma temporada em background (body: `tournament_id`, `season_id`)
+- `POST /async/games` — inicia extração de todas as temporadas (body: `slug_tournament`, `tournament_id`, `country`, `length_tournaments` opcional com IDs de temporada)
 - `GET /tasks/{task_id}` — consultar status/result
 - `DELETE /tasks/{task_id}` — cancelar task
 
@@ -85,13 +85,25 @@ curl "http://localhost:8000/games/football?season=58766&home_team=Flamengo"
 Iniciar extração de uma temporada (não salva no MongoDB):
 
 ```bash
-curl -X POST "http://localhost:8000/async/games/325/58766?transform_data=false"
+curl -X POST "http://localhost:8000/async/games/season" \
+	-H "Content-Type: application/json" \
+	-d '{"tournament_id":325,"season_id":58766}'
 ```
 
 Iniciar extração de uma temporada (salva no MongoDB):
 
 ```bash
-curl -X POST "http://localhost:8000/async/games/325/58766?transform_data=true"
+curl -X POST "http://localhost:8000/async/games/season" \
+	-H "Content-Type: application/json" \
+	-d '{"tournament_id":325,"season_id":58766}'
+```
+
+Iniciar extração de todas as temporadas com filtro opcional de IDs:
+
+```bash
+curl -X POST "http://localhost:8000/async/games" \
+	-H "Content-Type: application/json" \
+	-d '{"slug_tournament":"brasileirao-serie-a","tournament_id":325,"country":"brazil","length_tournaments":[58766,58767]}'
 ```
 
 Consultar status de task:

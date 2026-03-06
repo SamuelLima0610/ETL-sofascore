@@ -57,7 +57,9 @@ curl "http://localhost:8000/seasons?slug_tournament=brasileirao-serie-a&tourname
 
 ```bash
 # Substitua 325 pelo ID do torneio e 58766 pelo ID da temporada desejada
-curl -X POST "http://localhost:8000/async/games/325/58766?transform_data=false"
+curl -X POST "http://localhost:8000/async/games/season" \
+  -H "Content-Type: application/json" \
+  -d '{"tournament_id":325,"season_id":58766}'
 ```
 
 ### Verificar o status da task
@@ -69,13 +71,17 @@ curl http://localhost:8000/tasks/<task_id>
 ## 5. Extração Assíncrona (todas as temporadas de um torneio)
 
 ```bash
-curl -X POST "http://localhost:8000/async/games?slug_tournament=brasileirao-serie-a&id_tournament=325&country=brazil&transform_data=false"
+curl -X POST "http://localhost:8000/async/games" \
+  -H "Content-Type: application/json" \
+  -d '{"slug_tournament":"brasileirao-serie-a","tournament_id":325,"country":"brazil","length_tournaments":[58766,58767]}'
 ```
 
 ## 6. Script de monitoramento (exemplo)
 
 ```bash
-TASK_ID=$(curl -s -X POST "http://localhost:8000/async/games/325/58766?transform_data=false" | jq -r '.task_id')
+TASK_ID=$(curl -s -X POST "http://localhost:8000/async/games/season" \
+  -H "Content-Type: application/json" \
+  -d '{"tournament_id":325,"season_id":58766}' | jq -r '.task_id')
 while true; do
   STATUS=$(curl -s http://localhost:8000/tasks/$TASK_ID)
   echo $STATUS | jq '.'
