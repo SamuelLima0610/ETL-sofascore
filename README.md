@@ -1,134 +1,156 @@
 ````markdown
 # ETL Statistics
 
-Este repositório contém um pipeline ETL para coletar, transformar e persistir estatísticas de partidas (fonte: SofaScore).
+Pipeline completo para extrair estatísticas de partidas do SofaScore, transformar os dados em um modelo consolidado e persistir tudo em MongoDB, expondo os resultados através de uma API FastAPI e tarefas Celery.
 
-Resumo rápido:
-- Extração: `etl/extractor.py`
-- Transformação: `etl/transform.py`
-- Carga: `etl/load.py` (exemplo com MongoDB)
-- API + tasks: `api.py`, `celery_worker.py`
+## Destaques
+- FastAPI com endpoints síncronos para consultas e estatísticas já salvas.
+- Celery + Redis para acionar extrações pesadas em background (por temporada ou campeonato completo).
+- Módulos dedicados de ETL: `etl/extractor.py`, `etl/transform.py`, `etl/load.py`.
+- Scripts utilitários (`quickstart.sh` e `start.sh`) para preparar ambiente e subir todos os serviços rapidamente.
 
-**Pré-requisitos**
-- Python 3.8+
-- Redis (broker para Celery) — recomendado para executar tarefas em background
-- MongoDB (opcional, usado pelo `Load` se quiser persistir dados)
+## Requisitos
+- Python 3.8 ou superior
+- Redis acessível (broker/backend do Celery)
+- MongoDB Atlas ou instância compatível com o driver `pymongo`
+- `pip install -r requirements.txt`
 
-## Instalação rápida
+## Configuração
 
-1. Criar/ativar ambiente virtual:
+1. Crie e ative um ambiente virtual:
+
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+
+2. Instale as dependências:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Configure um arquivo `.env` na raiz com as credenciais dos serviços externos:
+
+   ```dotenv
+   REDIS_URL=redis://localhost:6379/0
+   USER_DB=<mongo_user>
+   PASSWORD_DB=<mongo_password>
+   MONGODB_COLLECTION=<collection_name>
+   ```
+
+   > O loader (`etl/load.py`) usa o cluster `Statistics` e conecta em `mongodb+srv://`. Ajuste conforme a sua instância.
+
+## Scripts úteis
+
+| Script | O que faz |
+| --- | --- |
+| `quickstart.sh` | Cria/ativa a `venv`, instala dependências e verifica se o Redis está rodando. Ideal para a primeira execução. |
+| `start.sh` | Checa Redis, ativa a `venv`, inicia Celery worker (log em `logs/celery_worker.log`) e sobe a API via Uvicorn em background. |
+
+Após rodar o `quickstart.sh`, basta executar `./start.sh` para colocar tudo no ar.
+
+## Executando manualmente
+
+Caso prefira controlar cada processo:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-2. Instalar dependências:
-
-```bash
-pip install -r requirements.txt
-```
-
-3. (Opcional) Criar arquivo `.env` com as variáveis abaixo quando usar MongoDB/Celery:
-
-```
-REDIS_URL=redis://localhost:6379/0
-USER_DB=<mongo_user>
-PASSWORD_DB=<mongo_password>
-MONGODB_COLLECTION=<collection_name>
-```
-
-## Executando localmente
-
-Guia rápido:
-
-- Usar o script `quickstart.sh` para preparar o ambiente.
-- Usar `start.sh` para iniciar o Celery worker e a API (script inicia o worker e o Uvicorn).
-
-Comandos manuais:
-
-```bash
-# Iniciar Celery Worker
+# Worker Celery
 celery -A celery_worker.celery_app worker --loglevel=info
 
-# Iniciar API (FastAPI / Uvicorn)
+# API FastAPI
 python -m uvicorn api:app --reload --host 0.0.0.0 --port 8000
 
-# Opcional: Flower para monitorar tarefas
+# (Opcional) Dashboard Flower
 celery -A celery_worker.celery_app flower --port=5555
 ```
 
-## API e endpoints principais
+## API
 
-- `GET /` : informações básicas e links para docs
-- `GET /health` : health check
-- `GET /tournaments` : retorna torneios por categoria
-- `GET /seasons` : obter temporadas (query params: `slug_tournament`, `tournament_id`, `country`)
-- `GET /games/{category}` : buscar jogos persistidos com filtros dinâmicos
-- `GET /versus/{category}` : estatísticas de confronto direto entre duas equipes
+Documentação automática: http://localhost:8000/docs
 
-GET `/games/{category}` — buscar jogos persistidos
+| Método | Caminho | Descrição |
+| --- | --- | --- |
+| GET | `/` | Metadados e mapa de endpoints disponíveis. |
+| GET | `/health` | Health check (inclui status do extractor e Celery). |
+| GET | `/tournaments` | Lista torneios disponíveis por categoria (`football`, `basketball`, ...). |
+| GET | `/seasons` | Busca temporadas de um torneio (`slug_tournament`, `tournament_id`, `country`). |
+| GET | `/games/{category}` | Consulta partidas salvas em MongoDB aceitando filtros dinâmicos via query string. |
+| GET | `/games/{collection}/{id}` | Recupera uma partida específica pelo `id` original do SofaScore. |
+| GET | `/versus/{collection}` | Calcula médias e retrospecto entre duas equipes (`team_one`, `team_two`). |
+| POST | `/async/seasons` | Dispara task para coletar temporadas de todos os torneios suportados. |
+| POST | `/async/games/season` | Agenda extração de uma temporada (`tournament_id`, `season_id`). |
+| POST | `/async/games` | Agenda extração completa de um torneio inteiro (todas as temporadas) com filtros opcionais. |
+| GET | `/tasks/{task_id}` | Consulta o estado/resultados de uma task Celery. |
+| DELETE | `/tasks/{task_id}` | Efetua cancelamento forçado de uma task em andamento. |
 
-Esse endpoint retorna os jogos já persistidos (MongoDB) e aceita filtros dinâmicos via query params. Exemplos de filtros suportados:
+### Filtros dinâmicos (`GET /games/{category}`)
+Todos os parâmetros enviados na query string são convertidos automaticamente:
 
-- `season` (int)
-- `round` (int)
-- `home_team` (string)
-- `away_team` (string)
-- qualquer outro campo presente nos documentos (ex.: `home_score`, `away_score`)
+- Dígitos inteiros => `int`
+- Valores com ponto => `float`
+- Demais => `str`
 
-Comportamento:
-
-- Os query params numéricos são convertidos automaticamente (inteiros ou floats). Strings são usadas como igualdade exata.
-- Se nenhum filtro for fornecido, todos os jogos persistidos são retornados.
-
-Exemplo (curl):
+Exemplo:
 
 ```bash
 curl "http://localhost:8000/games/football?season=58766&round=10&home_team=Flamengo"
 ```
 
-Resposta (exemplo):
+Resposta simplificada:
 
 ```json
 {
   "count": 3,
   "filters": {"season": 58766, "round": 10, "home_team": "Flamengo"},
-  "games": [ /* lista de jogos */ ]
+  "games": [ {"id": 123, "home_team": "Flamengo", "stats": [...] } ]
 }
 ```
 
-- Async (via Celery):
-  - `POST /async/seasons`
-  - `POST /async/games/season` (body JSON: `tournament_id`, `season_id`)
-  - `POST /async/games` (body JSON: `slug_tournament`, `tournament_id`, `country`, `length_tournaments` opcional com IDs de temporada)
-  - `GET /tasks/{task_id}` : status da task
-  - `DELETE /tasks/{task_id}` : cancelar task
+### Payloads das tasks
 
-Docs auto geradas (Swagger): `http://localhost:8000/docs`
+```json
+POST /async/games/season
+{
+  "tournament_id": 325,
+  "season_id": 58766
+}
 
-## Limitações observadas
+POST /async/games
+{
+  "slug_tournament": "brasileirao-serie-a",
+  "tournament_id": 325,
+  "country": "brazil",
+  "length_tournaments": [58766, 58767]
+}
+```
 
-- Após aproximadamente 4.000 partidas inseridas em sequência, a API pública do SofaScore costuma bloquear temporariamente o IP de origem. Caso precise processar volumes maiores, considere pausar o pipeline, alternar o endereço IP (VPN/proxy) ou distribuir a carga em janelas menores para evitar o rate limit.
+Use `GET /tasks/{task_id}` para acompanhar o progresso (estados `PENDING`, `PROGRESS`, `SUCCESS`, `FAILURE`).
 
-## Estrutura relevante
+## Fluxo ETL
+- **Extractor (`etl/extractor.py`)**: abre uma sessão com o SofaScore, lista torneios/temporadas e coleta estatísticas jogo a jogo.
+- **Transform (`etl/transform.py`)**: consolida informações relevantes (placar, rodada, stats por categoria) em um dicionário pronto para persistência.
+- **Load (`etl/load.py`)**: conecta no cluster MongoDB definido via `.env`, evita duplicatas por temporada/rodada/time e salva apenas jogos novos.
+- **Process helpers (`utils/process.py`)**: normaliza estatísticas e calcula médias para o endpoint `/versus`.
 
-- `api.py` — aplicação FastAPI que expõe endpoints sync/async
-- `celery_worker.py` — tasks Celery que usam `etl/` para extrair/transformar/carregar
-- `etl/extractor.py` — extrai dados da SofaScore
-- `etl/transform.py` — transforma estatísticas em estrutura consistente
-- `etl/load.py` — exemplo de loader para MongoDB
-- `const/const_football.py` — listas/constantes de estatísticas
-- `start.sh`, `quickstart.sh` — scripts de ajuda
+## Logs e observabilidade
+- `start.sh` grava o worker em `logs/celery_worker.log`; a API permanece no console.
+- Ative o Flower para inspecionar tasks em tempo real: `celery -A celery_worker.celery_app flower --port=5555`.
 
 ## Testes
 
-- `test_api.py` contém testes básicos para a API (rodar com pytest)
+```bash
+pytest
+```
+
+O arquivo `test_api.py` contém smoke tests básicos para os endpoints principais.
+
+## Limitações
+- Após ~4k partidas extraídas em sequência, o SofaScore tende a aplicar rate limit temporário. Considere janelas menores ou revezar o IP (VPN/proxy) em execuções massivas.
 
 ## Próximos passos sugeridos
-
-- Integrar um loader de exemplo (SQLite/Postgres) além do MongoDB
-- Adicionar mais testes de integração
-- Melhorar tratamento de erros e retries nas tasks Celery
+- Adicionar loaders alternativos (Postgres/SQLite) além do MongoDB.
+- Criar mais testes de integração/cobertura para os endpoints assíncronos.
+- Incrementar políticas de retry/backoff no Celery para lidar com instabilidades da API pública.
 
 ````

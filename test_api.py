@@ -61,7 +61,7 @@ def test_seasons():
 
 def test_games(season_id):
     """Testa o endpoint de games (síncrono)"""
-    print_section(f"6. Obtendo Jogos (Síncrono - Temporada {season_id})")
+    print_section(f"7. Obtendo Jogos (Síncrono - Temporada {season_id})")
     
     response = requests.get(f"{API_URL}/games/football", params={"season": season_id})
     data = response.json()
@@ -77,7 +77,7 @@ def test_games(season_id):
 
 def versus_stats(team_one, team_two):
     """Testa o endpoint de versus (síncrono)"""
-    print_section("7. Obtendo Estatísticas de Confronto (Síncrono)")
+    print_section("8. Obtendo Estatísticas de Confronto (Síncrono)")
     
     response = requests.get(f"{API_URL}/versus/football", params={
         "team_one": team_one,
@@ -146,7 +146,7 @@ def test_async_extraction(season_id):
 
 def test_async_games():
     """Testa extração assíncrona de todas as temporadas de um torneio"""
-    print_section("8. Extração Assíncrona de Todas as Temporadas")
+    print_section("9. Extração Assíncrona de Todas as Temporadas")
     
     # Parâmetros para o torneio de basquete (pode ser alterado para outro torneio)
     slug_tournament = "basketball"
@@ -232,6 +232,23 @@ def test_get_result(task_id):
     else:
         print(f"Estado atual: {data['state']}")
 
+def test_game_by_id(collection, game_id):
+    """Testa o endpoint que busca um jogo específico."""
+    print_section(f"6. Obtendo Jogo Específico ({collection} - ID {game_id})")
+
+    response = requests.get(f"{API_URL}/games/{collection}/{game_id}")
+    print(f"Status: {response.status_code}")
+
+    if response.status_code != 200:
+        print(f"Resposta: {response.text}")
+        return None
+
+    data = response.json()
+    print("\nResumo do jogo:")
+    print(f"  - {data.get('home_team')} {data.get('home_score')} x {data.get('away_score')} {data.get('away_team')}")
+    print(f"  - Rodada: {data.get('round')}, Temporada: {data.get('season')}")
+    return data
+
 
 def main():
     """Função principal"""
@@ -261,6 +278,9 @@ def main():
             # 5. Obter resultado
             test_get_result(task_id)
         
+        # 6. Jogo específico
+        test_game_by_id("basketball", 14441959)
+
         # Finalização
         test_games(season_id)
 

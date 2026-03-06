@@ -1,102 +1,105 @@
 ````markdown
-# Exemplos de Uso da API - cURL
+# Exemplos de Uso da API (cURL)
 
-## 1. Health Check
+Use estes snippets como ponto de partida. Ajuste `tournament_id`, `season_id`, times e coleções de acordo com os dados disponíveis no seu MongoDB.
+
+## 1. Health e metadados
 
 ```bash
 curl http://localhost:8000/health
+curl http://localhost:8000/
 ```
 
-## 2. Obter Torneios
+## 2. Descobrir torneios e temporadas
 
 ```bash
-curl http://localhost:8000/tournaments
+# Torneios por categoria
+curl http://localhost:8000/tournaments | jq '.'
+
+# Temporadas de um torneio
+curl "http://localhost:8000/seasons?slug_tournament=brasileirao-serie-a&tournament_id=325&country=brazil" | jq '.'
 ```
 
-## 3. Buscar jogos salvos (filtros)
-
-O endpoint `GET /games/{category}` permite enviar filtros via query params. Alguns filtros comuns:
-
-- `season` (int)
-- `round` (int)
-- `home_team` (string)
-- `away_team` (string)
-
-Exemplo:
+## 3. Consultar jogos já salvos
 
 ```bash
-curl "http://localhost:8000/games/football?season=58766&round=10&home_team=Flamengo"
-```
+# Filtros dinâmicos
+curl "http://localhost:8000/games/football?season=58766&round=10&home_team=Flamengo" | jq '.'
 
-Resposta (resumo):
-
-```json
-{
-  "count": 2,
-  "filters": {"season": 58766, "round": 10, "home_team": "Flamengo"},
-  "games": [ /* jogos */ ]
-}
+# Buscar um jogo específico (id original da partida)
+curl http://localhost:8000/games/football/123456
 ```
 
 Observações:
+- valores numéricos são convertidos para `int`/`float` automaticamente;
+- qualquer campo existente no documento pode ser usado como filtro.
 
-- Valores numéricos são convertidos automaticamente para `int` ou `float`.
-- Strings são comparadas por igualdade exata.
-
-## 3. Obter Temporadas (síncrono)
-
-Repare que `GET /seasons` exige query params: `slug_tournament`, `tournament_id`, `country`.
+## 4. Estatísticas de confronto direto
 
 ```bash
-curl "http://localhost:8000/seasons?slug_tournament=brasileirao-serie-a&tournament_id=325&country=brazil"
+curl "http://localhost:8000/versus/football?team_one=Flamengo&team_two=Palmeiras" | jq '.'
 ```
 
-## 4. Extração Assíncrona de uma Temporada
+O retorno contém os ids das temporadas envolvidas, número de jogos como mandante/visitante e médias por categoria de estatísticas.
 
-### Iniciar a extração
+## 5. Extração assíncrona
+
+### Única temporada
 
 ```bash
-# Substitua 325 pelo ID do torneio e 58766 pelo ID da temporada desejada
-curl -X POST "http://localhost:8000/async/games/season" \
+curl -X POST http://localhost:8000/async/games/season \
   -H "Content-Type: application/json" \
   -d '{"tournament_id":325,"season_id":58766}'
 ```
 
-### Verificar o status da task
+### Todas as temporadas (com filtro opcional)
 
 ```bash
-curl http://localhost:8000/tasks/<task_id>
-```
-
-## 5. Extração Assíncrona (todas as temporadas de um torneio)
-
-```bash
-curl -X POST "http://localhost:8000/async/games" \
+curl -X POST http://localhost:8000/async/games \
   -H "Content-Type: application/json" \
   -d '{"slug_tournament":"brasileirao-serie-a","tournament_id":325,"country":"brazil","length_tournaments":[58766,58767]}'
 ```
 
-## 6. Script de monitoramento (exemplo)
+### Assíncrono para temporadas configuradas
 
 ```bash
-TASK_ID=$(curl -s -X POST "http://localhost:8000/async/games/season" \
+curl -X POST http://localhost:8000/async/seasons
+```
+
+## 6. Acompanhar e cancelar tasks
+
+```bash
+# Status (mostra PROGRESS, SUCCESS, FAILURE)
+curl http://localhost:8000/tasks/<task_id> | jq '.'
+
+# Cancelar
+curl -X DELETE http://localhost:8000/tasks/<task_id>
+```
+
+## 7. Script shell para monitorar
+
+```bash
+TASK_ID=$(curl -s -X POST http://localhost:8000/async/games/season \
   -H "Content-Type: application/json" \
   -d '{"tournament_id":325,"season_id":58766}' | jq -r '.task_id')
+
 while true; do
   STATUS=$(curl -s http://localhost:8000/tasks/$TASK_ID)
-  echo $STATUS | jq '.'
-  STATE=$(echo $STATUS | jq -r '.state')
+  echo "$STATUS" | jq '.'
+  STATE=$(echo "$STATUS" | jq -r '.state')
   if [ "$STATE" = "SUCCESS" ] || [ "$STATE" = "FAILURE" ]; then
     break
   fi
-  sleep 2
+  sleep 3
 done
 ```
 
-## 7. Cancelar uma Task
+## 8. Limpeza pós-testes
 
 ```bash
-curl -X DELETE http://localhost:8000/tasks/<task_id>
+# Remover resultados antigos do MongoDB (exemplo usando mongosh)
+mongosh "mongodb+srv://<user>:<pass>@cluster.bmwwbf1.mongodb.net/Statistics" \
+  --eval 'db.games.deleteMany({season: 58766})'
 ```
 
 ````

@@ -91,3 +91,15 @@ def get_versus_stats(home_games: list, away_games: list):
         "home_games": _aggregate(home_games, team_as_home=True),
         "away_games": _aggregate(away_games, team_as_home=False),
     }
+
+def clean_mongodb_ids(data):
+    if isinstance(data, list):
+        for item in data:
+            if '_id' in item:
+                del item['_id']
+        return data
+    elif isinstance(data, dict):
+        if '_id' in data:
+            del data['_id']
+        return data
+    return data

@@ -6,19 +6,9 @@ from dotenv import load_dotenv
 import os
 from typing import List, Optional, Union
 
-load_dotenv()
+from utils import process
 
-def clean_mongodb_ids(data):
-    if isinstance(data, list):
-        for item in data:
-            if '_id' in item:
-                del item['_id']
-        return data
-    elif isinstance(data, dict):
-        if '_id' in data:
-            del data['_id']
-        return data
-    return data
+load_dotenv()
 
 # Configuração do Celery com Redis como broker
 REDIS_URL = os.getenv('REDIS_URL', os.getenv('REDIS_URL'))
@@ -72,7 +62,7 @@ def extract_games_by_season_task(self, season_id: int, tournament_id: int, colle
             loader.desconnect()
             
             # Limpa ObjectIds do MongoDB para que os dados sejam JSON serializáveis
-            games = clean_mongodb_ids(games)
+            games = process.clean_mongodb_ids(games)
         
         return {
             'status': 'completed',
@@ -165,7 +155,7 @@ def extract_all_games_task(
             self.update_state(state='PROGRESS', meta={'current': 95, 'total': 100, 'status': 'Dados salvos no MongoDB'})
             
             # Limpa ObjectIds do MongoDB para que os dados sejam JSON serializáveis
-            games = clean_mongodb_ids(games)
+            games = process.clean_mongodb_ids(games)
         
         return {
             'status': 'completed',

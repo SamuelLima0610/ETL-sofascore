@@ -1,120 +1,75 @@
 ````markdown
-# ETL Statistics - Celery + API
+# ETL Statistics — Guia Celery & Background Jobs
 
-Documentação e instruções para executar a API (FastAPI) com processamento em background usando Celery.
+Este documento complementa o README principal com tudo o que você precisa para orquestrar tarefas em background usando Celery + Redis.
 
-## Resumo
+## Componentes
+- **API (`api.py`)**: expõe os endpoints que disparam e acompanham tasks.
+- **Worker (`celery_worker.py`)**: contém as tasks `extract_games_by_season`, `extract_all_games` e `get_seasons`.
+- **ETL (`etl/*.py`)**: utilizado internamente pelas tasks para extrair, transformar e salvar os dados.
 
-- API: `api.py` (FastAPI)
-- Tasks/background: `celery_worker.py` (Celery usando Redis como broker/backend)
-- Extração/Transformação/Carga: `etl/extractor.py`, `etl/transform.py`, `etl/load.py`
-
-## Pré-requisitos
-
+## Pré-requisitos e variáveis
 - Python 3.8+
-- Redis (broker para Celery)
-- (Opcional) MongoDB se quiser persistir dados via `etl/load.py`
+- Redis disponível em `REDIS_URL` (ex.: `redis://localhost:6379/0`).
+- MongoDB configurado via `USER_DB`, `PASSWORD_DB` e `MONGODB_COLLECTION` no `.env` para que o loader grave os jogos.
 
-## Instalação
+## Subindo os serviços
+
+1. Execute `./quickstart.sh` para preparar a `venv`, instalar dependências e validar o Redis.
+2. Inicie tudo com `./start.sh` (ativa a `venv`, verifica o Redis, inicia o worker e a API). Logs do worker vão para `logs/celery_worker.log`.
+
+### Execução manual
 
 ```bash
-python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
-```
 
-## Variáveis de ambiente úteis
-
-- `REDIS_URL` (ex: `redis://localhost:6379/0`)
-- `USER_DB`, `PASSWORD_DB`, `MONGODB_COLLECTION` (para `etl/load.py`)
-
-## Executando
-
-Recomendo usar o `start.sh` que inicia o Celery worker e a API:
-
-```bash
-chmod +x start.sh
-./start.sh
-```
-
-Ou manualmente em terminais separados:
-
-Terminal 1 (Celery Worker):
-
-```bash
+# Worker
 celery -A celery_worker.celery_app worker --loglevel=info
-```
 
-Terminal 2 (API):
+# API (outro terminal)
+python -m uvicorn api:app --reload --host 0.0.0.0 --port 8000
 
-```bash
-python -m uvicorn api:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Terminal 3 (opcional - Flower):
-
-```bash
+# (Opcional) Flower
 celery -A celery_worker.celery_app flower --port=5555
 ```
 
-## Endpoints principais
+## Tasks disponíveis
 
-- `GET /` — metadados e links
-- `GET /health` — health check
-- `GET /tournaments` — lista torneios
-- `GET /seasons` — obter temporadas (query params: `slug_tournament`, `tournament_id`, `country`)
-- `GET /games/{category}` — buscar jogos persistidos (query params dinâmicos)
-- `GET /versus/{category}` — confronto direto entre duas equipes
+| Task | Endpoint que dispara | Descrição |
+| --- | --- | --- |
+| `get_seasons_task` | `POST /async/seasons` | Busca temporadas dos torneios suportados (útil para descobrir IDs recentes). |
+| `extract_games_by_season_task` | `POST /async/games/season` | Extrai uma temporada específica, transforma e salva no MongoDB se ainda não existir. |
+| `extract_all_games_task` | `POST /async/games` | Percorre todas as temporadas de um torneio (ou uma lista filtrada) e salva apenas jogos novos. |
 
-GET `/games/{category}` — detalhes rápidos
+Cada task emite estados `PENDING`, `PROGRESS`, `SUCCESS` ou `FAILURE`. Durante o `PROGRESS`, meta informa mensagens como "X jogos extraídos".
 
-Aceita filtros via query params (por exemplo: `season`, `round`, `home_team`, `away_team`). Valores numéricos são convertidos automaticamente. Se nenhum filtro for passado, retorna todos os jogos persistidos.
-
-Exemplo:
+## Exemplos de uso
 
 ```bash
-curl "http://localhost:8000/games/football?season=58766&home_team=Flamengo"
-```
-- `POST /async/games/season` — inicia extração de uma temporada em background (body: `tournament_id`, `season_id`)
-- `POST /async/games` — inicia extração de todas as temporadas (body: `slug_tournament`, `tournament_id`, `country`, `length_tournaments` opcional com IDs de temporada)
-- `GET /tasks/{task_id}` — consultar status/result
-- `DELETE /tasks/{task_id}` — cancelar task
+# Assíncrono por temporada
+curl -X POST http://localhost:8000/async/games/season \
+  -H "Content-Type: application/json" \
+  -d '{"tournament_id":325,"season_id":58766}'
 
-## Exemplo rápido (curl)
+# Assíncrono para todo o torneio (opcionalmente filtrando IDs de temporada)
+curl -X POST http://localhost:8000/async/games \
+  -H "Content-Type: application/json" \
+  -d '{"slug_tournament":"brasileirao-serie-a","tournament_id":325,"country":"brazil","length_tournaments":[58766,58767]}'
 
-Iniciar extração de uma temporada (não salva no MongoDB):
-
-```bash
-curl -X POST "http://localhost:8000/async/games/season" \
-	-H "Content-Type: application/json" \
-	-d '{"tournament_id":325,"season_id":58766}'
-```
-
-Iniciar extração de uma temporada (salva no MongoDB):
-
-```bash
-curl -X POST "http://localhost:8000/async/games/season" \
-	-H "Content-Type: application/json" \
-	-d '{"tournament_id":325,"season_id":58766}'
-```
-
-Iniciar extração de todas as temporadas com filtro opcional de IDs:
-
-```bash
-curl -X POST "http://localhost:8000/async/games" \
-	-H "Content-Type: application/json" \
-	-d '{"slug_tournament":"brasileirao-serie-a","tournament_id":325,"country":"brazil","length_tournaments":[58766,58767]}'
-```
-
-Consultar status de task:
-
-```bash
+# Status da task
 curl http://localhost:8000/tasks/<task_id>
+
+# Cancelamento
+curl -X DELETE http://localhost:8000/tasks/<task_id>
 ```
 
-## Logs
+## Monitoramento
+- **Flower** (`celery -A celery_worker.celery_app flower --port=5555`): dashboard web para acompanhar fila, retries e resultados.
+- **Logs**: `logs/celery_worker.log` (worker) e console da API. Ajuste o loglevel com `--loglevel=debug` se precisar de mais detalhes.
 
-- Celery: `logs/celery_worker.log` (quando iniciado via `start.sh`)
-- API: console (quando iniciado via Uvicorn)
+## Boas práticas
+- Mantenha o Redis saudável (limpe chaves antigas com `redis-cli FLUSHDB` em ambientes de teste).
+- Use o endpoint `GET /tasks/{task_id}` antes de disparar novas tarefas para evitar duplicidade.
+- Respeite os limites da API do SofaScore (veja a seção de limitações no README principal) e distribua cargas extensas em múltiplas execuções.
 
 ````
