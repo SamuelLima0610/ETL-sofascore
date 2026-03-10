@@ -71,7 +71,6 @@ def extract_games_by_season_task(self, season_id: int, tournament_id: int, colle
             'games': games
         }
     except Exception as e:
-        self.update_state(state='FAILURE', meta={'error': str(e)})
         raise
 
 
@@ -164,7 +163,6 @@ def extract_all_games_task(
             'games': games
         }
     except Exception as e:
-        self.update_state(state='FAILURE', meta={'error': str(e)})
         raise
 
 
@@ -180,5 +178,4 @@ def get_seasons_task(self, slug_tournament: str, id_tournament: int, country: st
             'seasons': seasons
         }
     except Exception as e:
-        self.update_state(state='FAILURE', meta={'error': str(e)})
         raise

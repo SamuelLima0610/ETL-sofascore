@@ -24,4 +24,5 @@ class Transform:
         game_info['home_score'] = game['homeScore']['current']
         game_info['away_score'] = game['awayScore']['current']
         game_info['stats'] = game['stats']
+        game_info['time'] = game['time']
         return game_info

@@ -70,35 +70,47 @@ async def get_all_games_async(payload: AllSeasonsExtractionRequest):
 async def get_task_status(task_id: str):
     """Consulta o estado atual de uma task Celery pelo id."""
     task_result = AsyncResult(task_id, app=celery_app)
-    if task_result.state == "PENDING":
+    try:
+        state = task_result.state
+        info = task_result.info
+        result = task_result.result
+    except Exception as exc:
+        return {
+            "task_id": task_id,
+            "state": "UNKNOWN",
+            "status": "Não foi possível decodificar o resultado da task (backend pode estar corrompido)",
+            "error": str(exc),
+        }
+
+    if state == "PENDING":
         response = {
             "task_id": task_id,
-            "state": task_result.state,
+            "state": state,
             "status": "Task aguardando processamento ou não existe",
         }
-    elif task_result.state == "PROGRESS":
+    elif state == "PROGRESS":
         response = {
             "task_id": task_id,
-            "state": task_result.state,
-            "progress": task_result.info,
+            "state": state,
+            "progress": info,
         }
-    elif task_result.state == "SUCCESS":
+    elif state == "SUCCESS":
         response = {
             "task_id": task_id,
-            "state": task_result.state,
-            "result": task_result.result,
+            "state": state,
+            "result": result,
         }
-    elif task_result.state == "FAILURE":
+    elif state == "FAILURE":
         response = {
             "task_id": task_id,
-            "state": task_result.state,
-            "error": str(task_result.info),
+            "state": state,
+            "error": str(info),
         }
     else:
         response = {
             "task_id": task_id,
-            "state": task_result.state,
-            "info": task_result.info if task_result.info else None,
+            "state": state,
+            "info": info if info else None,
         }
     return response
 

@@ -15,23 +15,10 @@ class Load:
 
     def insert_data(self, data, collection):
         self.collection = self.database.get_collection(collection)
-        # Filtra jogos que ainda não existem no banco
-        games_to_insert = []
-        for game in data:
-            # Verifica se já existe um jogo com o mesmo season, round, home_team e away_team
-            existing_game = self.collection.find_one({
-                'season': game['season'],
-                'round': game['round'],
-                'home_team': game['home_team'],
-                'away_team': game['away_team']
-            })
-            
-            if existing_game is None:
-                games_to_insert.append(game)
-        
-        # Insere apenas os jogos que não existem
-        if games_to_insert:
-            self.collection.insert_many(games_to_insert)
+        try:
+            self.collection.insert_many(data, ordered=False)
+        except Exception as e:            
+            pass
 
     def read_data(self, collection, query={}):
         self.collection = self.database.get_collection(collection)
