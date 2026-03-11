@@ -81,7 +81,7 @@ def extract_all_games_task(
     tournament_id: int,
     country: str = "brazil",
     collection: str = "games",
-    length_tournaments: Optional[Union[int, List[int]]] = None
+    seasons_ids: Optional[Union[int, List[int]]] = None
 ):
     try:
         # Atualiza progresso
@@ -103,9 +103,9 @@ def extract_all_games_task(
                 'status': f'Encontradas {total_seasons} temporadas. Iniciando extração...'
             }
         )
-        if length_tournaments is not None:
-            if isinstance(length_tournaments, list):
-                allowed_ids = set(length_tournaments)
+        if seasons_ids is not None:
+            if isinstance(seasons_ids, list):
+                allowed_ids = set(seasons_ids)
                 seasons = [season for season in seasons if season['id'] in allowed_ids]
                 total_seasons = len(seasons)
                 self.update_state(
@@ -117,7 +117,7 @@ def extract_all_games_task(
                     }
                 )
             else:
-                seasons = seasons[:length_tournaments]
+                seasons = seasons[:seasons_ids]
                 total_seasons = len(seasons)
                 self.update_state(
                     state='PROGRESS', 

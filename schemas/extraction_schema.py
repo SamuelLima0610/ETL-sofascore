@@ -12,4 +12,4 @@ class AllSeasonsExtractionRequest(BaseModel):
     slug_tournament: str
     tournament_id: int
     country: str
-    length_tournaments: Optional[List[int]] = None
+    seasons_ids: Optional[List[int]] = None

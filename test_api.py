@@ -157,7 +157,7 @@ def test_async_games():
         "tournament_id": id_tournament,
         "country": country
     }
-    payload["length_tournaments"] = [80229, 65360]  # Opcional: limite por IDs de temporada
+    payload["seasons_ids"] = [80229, 65360]  # Opcional: limite por IDs de temporada
 
     # Iniciar a task
     print(f"Iniciando extração de todas as temporadas de {slug_tournament}...")

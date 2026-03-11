@@ -50,7 +50,7 @@ async def get_all_games_async(payload: AllSeasonsExtractionRequest):
     slug_tournament = payload.slug_tournament
     tournament_id = payload.tournament_id
     country = payload.country
-    length_tournaments = payload.length_tournaments
+    seasons_ids = payload.seasons_ids
 
     selected_category = get_category_by_tournament_id(tournament_id) or "stats"
     task = extract_all_games_task.delay(
@@ -58,7 +58,7 @@ async def get_all_games_async(payload: AllSeasonsExtractionRequest):
         tournament_id,
         country,
         collection=selected_category,
-        length_tournaments=length_tournaments,
+        seasons_ids=seasons_ids,
     )
     return {
         "task_id": task.id,
