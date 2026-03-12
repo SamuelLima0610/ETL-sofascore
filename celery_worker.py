@@ -32,33 +32,31 @@ celery_app.conf.update(
 )
 
 @celery_app.task(bind=True, name='extract_games_by_season')
-def extract_games_by_season_task(self, season_id: int, tournament_id: int, collection: str = "games"):
+def extract_games_by_season_task(self, season_id: int, tournament_id: int, collection: str = "games", tournament_name: str="Unknow"):
     try:
         # Atualiza progresso
-        self.update_state(state='PROGRESS', meta={'current': 0, 'total': 38, 'status': 'Iniciando extração...'})
+        self.update_state(state='PROGRESS', meta={'current': 0, 'total': 0, 'status': 'Iniciando extração...', 'tournament_name': tournament_name, 'seasons_id': season_id})
         
         # Inicializa extractor
         extractor = Extractor()
-        self.update_state(state='PROGRESS', meta={'current': 1, 'total': 38, 'status': 'Extractor inicializado'})
+        self.update_state(state='PROGRESS', meta={'current': 0, 'total': 0, 'status': 'Extractor inicializado', 'tournament_name': tournament_name, 'seasons_id': season_id})
         
         # Extrai jogos
         games = extractor.get_games_by_season(tournament_id, season_id)
-        self.update_state(state='PROGRESS', meta={'current': 35, 'total': 38, 'status': f'{len(games)} jogos extraídos'})
+        self.update_state(state='PROGRESS', meta={'current': len(games), 'total': len(games), 'status': f'{len(games)} jogos extraídos', 'tournament_name': tournament_name, 'seasons_id': season_id})
         
         # Aplica transformações se necessário
         if games:
             transformer = Transform(games, tournament_id)
             games = transformer.transform()
-            self.update_state(state='PROGRESS', meta={'current': 36, 'total': 38, 'status': 'Dados transformados'})
-            
             # Salva no MongoDB
             loader = Load()
             games_saved = loader.read_data(collection, {'season': season_id, 'tournament_id': tournament_id})
             if len(games_saved) == len(games):
-                self.update_state(state='PROGRESS', meta={'current': 37, 'total': 38, 'status': 'Dados já existem no MongoDB'})
+                self.update_state(state='PROGRESS', meta={'current': len(games), 'total': len(games), 'status': 'Dados já existem no MongoDB', 'tournament_name': tournament_name, 'seasons_id': season_id})
             else:
                 loader.insert_data(games, collection)
-                self.update_state(state='PROGRESS', meta={'current': 37, 'total': 38, 'status': 'Dados salvos no MongoDB'})
+                self.update_state(state='PROGRESS', meta={'current': len(games), 'total': len(games), 'status': 'Dados salvos no MongoDB', 'tournament_name': tournament_name, 'seasons_id': season_id})
             loader.desconnect()
             
             # Limpa ObjectIds do MongoDB para que os dados sejam JSON serializáveis
@@ -66,9 +64,9 @@ def extract_games_by_season_task(self, season_id: int, tournament_id: int, colle
         
         return {
             'status': 'completed',
-            'season_id': season_id,
+            'seasons_id': season_id,
             'total_games': len(games),
-            'games': games
+            'tournament_name': tournament_name
         }
     except Exception as e:
         raise
@@ -81,11 +79,12 @@ def extract_all_games_task(
     tournament_id: int,
     country: str = "brazil",
     collection: str = "games",
-    seasons_ids: Optional[Union[int, List[int]]] = None
+    seasons_ids: Optional[Union[int, List[int]]] = None,
+    tournament_name: str = "Unknow"
 ):
     try:
         # Atualiza progresso
-        self.update_state(state='PROGRESS', meta={'current': 0, 'total': 100, 'status': 'Iniciando extração...'})
+        self.update_state(state='PROGRESS', meta={'current': 0, 'total': 0, 'status': 'Iniciando extração...', 'tournament_name': tournament_name})
         
         # Inicializa extractor
         extractor = Extractor()
@@ -98,9 +97,10 @@ def extract_all_games_task(
         self.update_state(
             state='PROGRESS', 
             meta={
-                'current': 5, 
-                'total': 100, 
-                'status': f'Encontradas {total_seasons} temporadas. Iniciando extração...'
+                'current': 0, 
+                'total': total_seasons, 
+                'status': f'Encontradas {total_seasons} temporadas. Iniciando extração...',
+                'tournament_name': tournament_name
             }
         )
         if seasons_ids is not None:
@@ -111,9 +111,10 @@ def extract_all_games_task(
                 self.update_state(
                     state='PROGRESS',
                     meta={
-                        'current': 5,
-                        'total': 100,
-                        'status': f'Filtrando para {total_seasons} temporadas específicas...'
+                        'current': 0,
+                        'total': total_seasons,
+                        'status': f'Filtrando para {total_seasons} temporadas específicas...',
+                        'tournament_name': tournament_name
                     }
                 )
             else:
@@ -122,13 +123,24 @@ def extract_all_games_task(
                 self.update_state(
                     state='PROGRESS', 
                     meta={
-                        'current': 5, 
-                        'total': 100, 
-                        'status': f'Limitando a {total_seasons} temporadas para pesquisar...'
+                        'current': 0, 
+                        'total': total_seasons, 
+                        'status': f'Limitando a {total_seasons} temporadas para pesquisar...',
+                        'tournament_name': tournament_name
                     }
                 )
         games = []
-        for season in seasons:
+        for i, season in enumerate(seasons):
+            self.update_state(
+                state='PROGRESS',
+                meta={
+                    'current': i + 1,
+                    'total': total_seasons,
+                    'status': f'Processando temporada {i + 1} de {total_seasons} ({season.get("year", season.get("id"))})...',
+                    'tournament_name': tournament_name,
+                    'seasons_id': ';'.join(map(str, seasons_ids)) if seasons_ids else None
+                }
+            )
             extracted_games = extractor.get_games_by_season(tournament_id, season['id'])
             games_saved = loader.read_data(collection, {'season': season['id'], 'tournament_id': tournament_id})
             if len(games_saved) != len(extracted_games):
@@ -137,9 +149,11 @@ def extract_all_games_task(
         self.update_state(
             state='PROGRESS', 
             meta={
-                'current': 90, 
-                'total': 100, 
-                'status': f'{len(games)} jogos extraídos de {total_seasons} temporadas'
+                'current': len(games), 
+                'total': len(games), 
+                'status': f'{len(games)} jogos extraídos de {total_seasons} temporadas',
+                'tournament_name': tournament_name,
+                'seasons_id': ';'.join(map(str, seasons_ids)) if seasons_ids else None
             }
         )
         
@@ -147,11 +161,9 @@ def extract_all_games_task(
         if games:
             transformer = Transform(games, tournament_id)
             games = transformer.transform()
-            self.update_state(state='PROGRESS', meta={'current': 92, 'total': 100, 'status': 'Dados transformados'})
-            
             loader.insert_data(games, collection)
             loader.desconnect()
-            self.update_state(state='PROGRESS', meta={'current': 95, 'total': 100, 'status': 'Dados salvos no MongoDB'})
+            self.update_state(state='PROGRESS', meta={'current': len(games), 'total': len(games), 'status': 'Dados salvos no MongoDB', 'tournament_name': tournament_name, 'seasons_id': ';'.join(map(str, seasons_ids)) if seasons_ids else None})
             
             # Limpa ObjectIds do MongoDB para que os dados sejam JSON serializáveis
             games = process.clean_mongodb_ids(games)
@@ -160,7 +172,7 @@ def extract_all_games_task(
             'status': 'completed',
             'total_seasons': total_seasons,
             'total_games': len(games),
-            'games': games
+            'tournament_name': tournament_name
         }
     except Exception as e:
         raise

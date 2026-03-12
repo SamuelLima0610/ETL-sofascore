@@ -32,5 +32,5 @@ def get_category_by_tournament_id(tournament_id: int):
     for category_name, tournaments_list in tournaments.items():
         for tournament in tournaments_list:
             if tournament.get("id") == tournament_id:
-                return category_name
-    return None
+                return category_name, tournament.get("name")
+    return 'stats', None
