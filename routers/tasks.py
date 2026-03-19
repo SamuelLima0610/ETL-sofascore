@@ -1,15 +1,17 @@
 """Endpoints responsáveis por tasks assíncronas e monitoramento."""
 from fastapi import APIRouter, HTTPException, Query
 from celery.result import AsyncResult
-from typing import Optional, List, Dict, Any
+from typing import Optional
 
 from celery_worker import (
     celery_app,
     extract_games_by_season_task,
     extract_all_games_task,
     get_seasons_task,
+    predict_match_task
 )
 from schemas.extraction_schema import AllSeasonsExtractionRequest, SeasonExtractionRequest
+from schemas.prediction_schema import PredictionRequest
 from utils.tournaments import get_category_by_tournament_id
 
 router = APIRouter()
@@ -67,6 +69,31 @@ async def get_all_games_async(payload: AllSeasonsExtractionRequest):
         "status": "processing",
         "message": "Task iniciada. Esta operação pode demorar. Dados serão salvos no MongoDB. Use GET /tasks/{task_id} para verificar o status",
     }
+
+@router.post("/async/prediction")
+async def predict_game_winner_probability_async(payload: PredictionRequest):
+    """Agenda extração assíncrona dos jogos de uma temporada específica."""
+    try:
+        season_id = payload.season_id
+        tournament_id = payload.tournament_id
+        home_team = payload.home_team
+        away_team = payload.away_team
+        game_id = payload.game_id
+        selected_category,_ = get_category_by_tournament_id(tournament_id)
+
+        task = predict_match_task.delay(selected_category, game_id, home_team, away_team, tournament_id, season_id)
+        return {
+            "task_id": task.id,
+            "season_id": season_id,
+            "tournament_id": tournament_id,
+            "category": selected_category,
+            "status": "processing",
+            "message": "Task iniciada. Dados serão salvos no MongoDB. Use GET /tasks/{task_id} para verificar o status",
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erro ao iniciar extração: {str(exc)}") from exc
 
 @router.get("/tasks/{task_id}")
 async def get_task_status(task_id: str):

@@ -10,6 +10,7 @@ import app_dependencies as deps
 from routers.general import router as general_router
 from routers.games import router as games_router
 from routers.tasks import router as tasks_router
+from utils.database import Database
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -18,12 +19,13 @@ async def lifespan(app: FastAPI):
     deps.extractor = Extractor()
     print("Extractor inicializado com sucesso!")
     print("Inicializando Load...")
-    deps.load = Load()
+    deps.database = Database()
+    deps.load = Load(deps.database)
     print("Load inicializado com sucesso!")
     yield
     print("Encerrando aplicação...")
-    if deps.load:
-        deps.load.desconnect()
+    if deps.database is not None:
+        deps.database.disconnect()
         deps.load = None
     deps.extractor = None
 

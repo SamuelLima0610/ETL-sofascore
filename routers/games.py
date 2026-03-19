@@ -23,7 +23,7 @@ async def get_games(category: str, request: Request):
             filters[key] = value
 
     try:
-        games = deps.load.read_data(category, query=filters)
+        games = deps.database.read_data(category, query=filters)
         for game in games:
             if '_id' in game:
                 game['_id'] = str(game['_id'])
@@ -40,20 +40,20 @@ async def get_versus_stats(collection: str, team_one: str, team_two: str):
     """Compara desempenho histórico entre duas equipes."""
     if deps.extractor is None:
         raise HTTPException(status_code=503, detail="Extractor não inicializado")
-    if deps.load is None:
-        raise HTTPException(status_code=503, detail="Load não inicializado")
+    if deps.database is None:
+        raise HTTPException(status_code=503, detail="Database não inicializado")
 
-    at_house = deps.load.read_data(collection, query={"home_team": team_one, "away_team": team_two})
-    at_away = deps.load.read_data(collection, query={"home_team": team_two, "away_team": team_one})
+    at_house = deps.database.read_data(collection, query={"home_team": team_one, "away_team": team_two})
+    at_away = deps.database.read_data(collection, query={"home_team": team_two, "away_team": team_one})
     return process.get_versus_stats(at_house, at_away)
 
 @router.get("/games/{collection}/{id}")
 async def get_game(collection: str, id: int):
     """Busca um jogo específico pelo ID (síncrono) de uma determinada configuração."""
-    if deps.load is None:
-        raise HTTPException(status_code=503, detail="Load não inicializado")
+    if deps.database is None:
+        raise HTTPException(status_code=503, detail="Database não inicializado")
     try:
-        game = deps.load.read_data(collection, query={"id": id})
+        game = deps.database.read_data(collection, query={"id": id})
         game = process.clean_mongodb_ids(game)
         if not game:
             raise HTTPException(status_code=404, detail="Jogo não encontrado")
