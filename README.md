@@ -78,6 +78,7 @@ Documentação automática: http://localhost:8000/docs
 | GET | `/games/{category}` | Consulta partidas salvas em MongoDB aceitando filtros dinâmicos via query string. |
 | GET | `/games/{collection}/{id}` | Recupera uma partida específica pelo `id` original do SofaScore. |
 | GET | `/versus/{collection}` | Calcula médias e retrospecto entre duas equipes (`team_one`, `team_two`). |
+| POST | `/async/prediction` | Inicia task para prever a probabilidade de vitória do confronto (`game_id`, `home_team`, `away_team`, `tournament_id`, `season_id`). |
 | POST | `/async/seasons` | Dispara task para coletar temporadas de todos os torneios suportados. |
 | POST | `/async/games/season` | Agenda extração de uma temporada (`tournament_id`, `season_id`). |
 | POST | `/async/games` | Agenda extração completa de um torneio inteiro (todas as temporadas) com filtros opcionais. |

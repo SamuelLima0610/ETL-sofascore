@@ -5,7 +5,7 @@ Este documento complementa o README principal com tudo o que você precisa para 
 
 ## Componentes
 - **API (`api.py`)**: expõe os endpoints que disparam e acompanham tasks.
-- **Worker (`celery_worker.py`)**: contém as tasks `extract_games_by_season`, `extract_all_games` e `get_seasons`.
+- **Worker (`celery_worker.py`)**: contém as tasks `extract_games_by_season`, `extract_all_games`, `get_seasons` e `predict_match`.
 - **ETL (`etl/*.py`)**: utilizado internamente pelas tasks para extrair, transformar e salvar os dados.
 
 ## Pré-requisitos e variáveis
@@ -39,6 +39,7 @@ celery -A celery_worker.celery_app flower --port=5555
 | --- | --- | --- |
 | `get_seasons_task` | `POST /async/seasons` | Busca temporadas dos torneios suportados (útil para descobrir IDs recentes). |
 | `extract_games_by_season_task` | `POST /async/games/season` | Extrai uma temporada específica, transforma e salva no MongoDB se ainda não existir. |
+| `predict_match_task` | `POST /async/prediction` | Treina um modelo de ML (Logistic Regression) com dados da temporada e prevê probabilidade de vitória. |
 | `extract_all_games_task` | `POST /async/games` | Percorre todas as temporadas de um torneio (ou uma lista filtrada) e salva apenas jogos novos. |
 
 Cada task emite estados `PENDING`, `PROGRESS`, `SUCCESS` ou `FAILURE`. Durante o `PROGRESS`, meta informa mensagens como "X jogos extraídos".

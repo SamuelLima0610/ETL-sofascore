@@ -42,7 +42,23 @@ curl "http://localhost:8000/versus/football?team_one=Flamengo&team_two=Palmeiras
 
 O retorno contém os ids das temporadas envolvidas, número de jogos como mandante/visitante e médias por categoria de estatísticas.
 
-## 5. Extração assíncrona
+## 5. Predição de probabilidade de vitória
+
+Dispara uma tarefa assíncrona que treina um modelo de Regressão Logística com os dados da temporada e prevê as probabilidades para o confronto.
+
+```bash
+curl -X POST http://localhost:8000/async/prediction \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tournament_id": 325,
+    "season_id": 58766,
+    "game_id": 1234567,
+    "home_team": "Flamengo",
+    "away_team": "Palmeiras"
+  }' | jq '.'
+```
+
+## 6. Extração assíncrona
 
 ### Única temporada
 
@@ -66,7 +82,7 @@ curl -X POST http://localhost:8000/async/games \
 curl -X POST http://localhost:8000/async/seasons
 ```
 
-## 6. Acompanhar e cancelar tasks
+## 7. Acompanhar e cancelar tasks
 
 ```bash
 # Status (mostra PROGRESS, SUCCESS, FAILURE)
@@ -76,7 +92,7 @@ curl http://localhost:8000/tasks/<task_id> | jq '.'
 curl -X DELETE http://localhost:8000/tasks/<task_id>
 ```
 
-## 7. Script shell para monitorar
+## 8. Script shell para monitorar
 
 ```bash
 TASK_ID=$(curl -s -X POST http://localhost:8000/async/games/season \
@@ -94,7 +110,7 @@ while true; do
 done
 ```
 
-## 8. Limpeza pós-testes
+## 9. Limpeza pós-testes
 
 ```bash
 # Remover resultados antigos do MongoDB (exemplo usando mongosh)
