@@ -21,8 +21,14 @@ class Transform:
         game_info['id'] = game['id']
         game_info['home_team'] = game['homeTeam']['name']
         game_info['away_team'] = game['awayTeam']['name']
-        game_info['home_score'] = game['homeScore']['current']
-        game_info['away_score'] = game['awayScore']['current']
-        game_info['stats'] = game['stats']
+        try:
+            game_info['home_score'] = game['homeScore']['current']
+            game_info['away_score'] = game['awayScore']['current']
+            game_info['stats'] = game['stats']
+        except KeyError:
+            game_info['home_score'] = ''
+            game_info['away_score'] = ''
+            game_info['stats'] = []
+            game_info['status'] = game['status']['type']
         game_info['time'] = game['time']
         return game_info

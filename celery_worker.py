@@ -249,7 +249,7 @@ def predict_match_task(self, collection, game_id: int, home_team: str, away_team
             "away_team_win_probability": float(y_prob[0]),
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
-        database.insert_data([prediction], "predictions")
+        database.insert_prediction(prediction)
         database.disconnect()
     except Exception as e:
         print(e)

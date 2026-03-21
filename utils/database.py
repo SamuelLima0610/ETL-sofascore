@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-import os
+import os, time
 from pymongo import MongoClient
 
 load_dotenv()
@@ -12,12 +12,22 @@ class Database:
         self.client = MongoClient(f"mongodb+srv://{user}:{password}@cluster.bmwwbf1.mongodb.net/?appName=Cluster")
         self.database = self.client.get_database('Statistics')
     
-    def insert_data(self, data, collection):
+    def insert_data(self, games, collection):
         self.collection = self.database.get_collection(collection)
-        try:
-            self.collection.insert_many(data, ordered=False)
-        except Exception as e:            
-            pass
+        for game in games:
+            try:
+                game_searched = list(self.read_data(collection, {"id": game["id"]}))
+                if len(game_searched) > 0:
+                    if 'status' in list(game_searched[0].keys()) and 'status' not in list(game.keys()):
+                        self.collection.replace_one({"id": game["id"]}, game)
+                if len(game_searched) == 0:
+                    self.collection.insert_one(game)
+            except Exception as e:            
+                pass
+
+    def insert_prediction(self, prediction):
+        self.collection = self.database.get_collection('predictions')
+        self.collection.replace_one({"game_id": prediction["game_id"]}, prediction, upsert=True)
 
     def read_data(self, collection, query={}):
         self.collection = self.database.get_collection(collection)
@@ -25,7 +35,12 @@ class Database:
 
     def read_last_games(self, collection, team_name: str, n: int = 5, lt_value=None, tournament_id=None, season_id=None):
         self.collection = self.database.get_collection(collection)
-        team_clause = {"$or": [{"home_team": team_name}, {"away_team": team_name}]}
+        team_clause = {
+            "$and": [
+                {"$or": [{"home_team": team_name}, {"away_team": team_name}]},
+                {"status": {"$exists": False}}
+            ]
+        }
 
         if lt_value is not None:
             try:

@@ -50,23 +50,27 @@ class Extractor:
                     response = self.session.get(f"https://www.sofascore.com/api/v1/unique-tournament/{tournament_id}/season/{season_id}/events/round/{round['round']}/slug/{round['slug']}")
                 else:
                     response = self.session.get(f"https://www.sofascore.com/api/v1/unique-tournament/{tournament_id}/season/{season_id}/events/round/{round[key]}")
-                
                 if response.status_code != 200:
                     continue
-
                 data = response.json()
                 events = data.get('events', [])
                 for game in events:
                     game_info = game
-                    if 'current' not in list(game.get('homeScore', {}).keys()) and 'current' not in list(game.get('awayScore', {}).keys()):
+                    if game['status']['type'] == 'postponed':
                         continue
-                    try:
+                    elif game['status']['type'] == 'notstarted':
                         game_info['season_id'] = season_id
-                        game_info['stats'] = self.__get_game_stats(game['id'])
+                        game_info['stats'] = []
                         game_info['round'] = round[key]
-                        game_info['time'] = game.get('time', {}).get('currentPeriodStartTimestamp')
-                    except (KeyError, IndexError):
-                        game_info['stats'] = None
+                        game_info['time'] = game.get('startTimestamp', None)
+                    elif game['status']['type'] == 'finished':
+                        try:
+                            game_info['season_id'] = season_id
+                            game_info['stats'] = self.__get_game_stats(game['id'])
+                            game_info['round'] = round[key]
+                            game_info['time'] = game.get('startTimestamp', None)
+                        except (KeyError, IndexError):
+                            game_info['stats'] = None
                     games.append(game_info)
             except Exception as e:
                 print(f"Erro ao extrair jogos para round {round.get(key)}: {str(e)}")
@@ -85,19 +89,23 @@ class Extractor:
                 events = data.get('events', [])
                 if not events:
                     break
-                
                 for game in events:
-                    
                     game_info = game
-                    if 'current' not in list(game.get('homeScore', {}).keys()) and 'current' not in list(game.get('awayScore', {}).keys()):
+                    if game['status']['type'] == 'postponed':
                         continue
-                    try:
+                    if game['status']['type'] == 'notstarted':
                         game_info['season_id'] = season_id
-                        game_info['stats'] = self.__get_game_stats(game['id'])
+                        game_info['stats'] = []
                         game_info['round'] = index
-                        game_info['time'] = game.get('time', {}).get('currentPeriodStartTimestamp')
-                    except (KeyError, IndexError):
-                        game_info['stats'] = None
+                        game_info['time'] = game.get('startTimestamp', None)
+                    elif game['status']['type'] == 'finished':
+                        try:
+                            game_info['season_id'] = season_id
+                            game_info['stats'] = self.__get_game_stats(game['id'])
+                            game_info['round'] = index
+                            game_info['time'] = game.get('startTimestamp', None)
+                        except (KeyError, IndexError):
+                            game_info['stats'] = None
                     games.append(game_info)
                 index += 1
             except Exception as e:
