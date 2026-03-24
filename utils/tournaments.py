@@ -34,3 +34,15 @@ def get_category_by_tournament_id(tournament_id: int):
             if tournament.get("id") == tournament_id:
                 return category_name, tournament.get("name")
     return 'stats', None
+
+def has_draws(category: str) -> bool:
+    """Check if a sport category allows draws in regular matches.
+    
+    Args:
+        category: The sport category (e.g., 'football', 'basketball')
+        
+    Returns:
+        bool: True if draws are possible, False otherwise
+    """
+    sports_with_draws = {'football'}  # Only football allows draws by default in these sports
+    return category.lower() in sports_with_draws

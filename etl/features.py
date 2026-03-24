@@ -99,7 +99,7 @@ def compute_season_features(database, collection: str, tournament_id: int, seaso
     mais as features históricas do time mandante e visitante.
     """
     teams_elo_raiting = {}
-    games = database.read_data(collection, query={"season": season_id, "tournament_id": tournament_id})
+    games = database.read_data(collection, query={"season": season_id, "tournament_id": tournament_id, "status": {"$exists": False}})
     games = sorted(games, key=lambda g: g.get("time") or 0)
 
     result = []
@@ -129,6 +129,13 @@ def compute_season_features(database, collection: str, tournament_id: int, seaso
         clean_mongodb_ids(home_prev)
         clean_mongodb_ids(away_prev)
 
+        if int(game.get("home_score", 0) > game.get("away_score", 0)):
+            result_game = 1
+        elif int(game.get("home_score", 0) == game.get("away_score", 0)):
+            result_game = 0
+        else:
+            result_game = -1
+
         result.append({
             "time": game_time,
             "elo_rating_home": home_elo,
@@ -140,7 +147,7 @@ def compute_season_features(database, collection: str, tournament_id: int, seaso
             "away_team_features_10_games": compute_team_features(away_prev[:10], away_team),
             "home_team_features_15_games": compute_team_features(home_prev[:15], home_team),
             "away_team_features_15_games": compute_team_features(away_prev[:15], away_team),
-            "is_home_team_winner": int(game.get("home_score", 0) > game.get("away_score", 0)),
+            "result": result_game,
         })
 
         # Atualiza os ratings Elo dos times
@@ -179,7 +186,7 @@ def season_features_to_dataframe(season_features: list) -> pd.DataFrame:
     """Transforma a saída de compute_season_features em um DataFrame pandas.
 
     Cada linha representa um jogo. As colunas são:
-    - Informações básicas: time, home_team, away_team, is_home_team_winner
+    - Informações básicas: time, home_team, away_team, result
     - Features do time mandante e visitante para janelas de 5, 10 e 15 jogos anteriores,
       separadas por papel (as_home / as_away) e por estatística.
 
@@ -191,7 +198,7 @@ def season_features_to_dataframe(season_features: list) -> pd.DataFrame:
     for record in season_features:
         row = {
             "time": record.get("time"),
-            "is_home_team_winner": record.get("is_home_team_winner"),
+            "result": record.get("result"),
         }
 
         for w in windows:

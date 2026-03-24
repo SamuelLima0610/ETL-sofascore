@@ -1,7 +1,13 @@
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
+from xgboost import XGBClassifier
+
+
 import pandas as pd
+import numpy as np
 
 def build_match_features(df: pd.DataFrame):
     """Constrói features diferenciais (home - away) para cada estatística e janela temporal.
@@ -15,7 +21,7 @@ def build_match_features(df: pd.DataFrame):
     windows = [5, 10, 15]
     roles = ["as_home", "as_away"]
 
-    meta_cols = ["game_id", "time", "home_team", "away_team", "home_score", "away_score", "is_home_team_winner"]
+    meta_cols = ["game_id", "time", "home_team", "away_team", "home_score", "away_score", "result"]
     result = df[[c for c in meta_cols if c in df.columns]].copy()
 
     for w in windows:
@@ -37,12 +43,12 @@ def prepare_training_data(df):
         df: DataFrame com features brutas da temporada
         
     Returns:
-        tuple: (X, y) onde X são as features e y é o target (is_home_team_winner)
+        tuple: (X, y) onde X são as features e y é o target (result)
     """
     df_filled = df.fillna(0)
     df_transformed = build_match_features(df_filled)
-    X = df_transformed.drop(columns=["is_home_team_winner"])
-    y = df_transformed["is_home_team_winner"]
+    X = df_transformed.drop(columns=["result"], errors='ignore')
+    y = df_transformed["result"] if "result" in df_transformed.columns else None
     return X, y
 
 def split_and_scale_data(X, y, test_size=0.2, random_state=42):
@@ -78,7 +84,7 @@ def prepare_prediction_data(df_predict, reference_columns, scaler):
     """
     df_filled = df_predict.fillna(0)
     df_transformed = build_match_features(df_filled)
-    df_final = df_transformed.drop(columns=["is_home_team_winner"], errors='ignore')
+    df_final = df_transformed.drop(columns=["result"], errors='ignore')
     
     # Alinhar colunas: adicionar colunas faltantes com 0
     for col in reference_columns:
@@ -104,3 +110,58 @@ def train_logistic_regression(X_train, y_train):
     model = LogisticRegression(random_state=None)
     model.fit(X_train, y_train)
     return model
+
+
+def train_random_forest(X_train, y_train):
+    """Treina um modelo de Random Forest.
+    
+    Args:
+        X_train: Features de treino (já normalizadas)
+        y_train: Target de treino
+        
+    Returns:
+        RandomForestClassifier: Modelo treinado
+    """
+    model = RandomForestClassifier(random_state=None)
+    model.fit(X_train, y_train)
+    return model
+
+def train_xgboost(X_train, y_train):
+    """Treina um modelo de XGBoost com suporte a classes customizadas.
+    
+    Args:
+        X_train: Features de treino (já normalizadas)
+        y_train: Target de treino
+        
+    Returns:
+        XGBClassifierWithEncoder: Modelo treinado com encoder de label
+    """
+    # Criar e treinar o label encoder
+    label_encoder = LabelEncoder()
+    y_train_encoded = label_encoder.fit_transform(y_train)
+    
+    # Treinar o modelo XGBoost com as classes codificadas
+    model = XGBClassifier(
+        random_state=None, 
+        use_label_encoder=False, 
+        eval_metric='logloss'
+    )
+    model.fit(X_train, y_train_encoded)
+    
+    # Criar um wrapper que mantém o encoder
+    class XGBClassifierWithEncoder:
+        def __init__(self, xgb_model, encoder):
+            self.model = xgb_model
+            self.encoder = encoder
+            self.classes_ = encoder.classes_
+        
+        def predict_proba(self, X):
+            """Prediz probabilidades mantendo as classes originais."""
+            return self.model.predict_proba(X)
+        
+        def predict(self, X):
+            """Faz predição e decodifica para as classes originais."""
+            y_pred_encoded = self.model.predict(X)
+            return self.encoder.inverse_transform(y_pred_encoded)
+    
+    return XGBClassifierWithEncoder(model, label_encoder)
