@@ -6,21 +6,69 @@ import utils.process as process
 
 router = APIRouter()
 
+def _parse_filter_value(value: str):
+    """Converte valor do parâmetro para tipo apropriado."""
+    if value.isdigit():
+        return int(value)
+    elif value.replace('.', '', 1).isdigit():
+        return float(value)
+    else:
+        return value
+
+
+def _build_mongo_query(query_params: dict) -> dict:
+    """Constrói query MongoDB a partir de parâmetros com operadores."""
+    filters = {}
+    operators = {
+        'gte': '$gte',
+        'lte': '$lte',
+        'gt': '$gt',
+        'lt': '$lt',
+        'eq': '$eq',
+        'ne': '$ne',
+        'in': '$in',
+        'nin': '$nin',
+    }
+    
+    for key, value in query_params.items():
+        # Verifica se a chave termina com um operador
+        operator_found = None
+        field_name = key
+        
+        for op_suffix, mongo_op in operators.items():
+            if key.endswith(f'_{op_suffix}'):
+                operator_found = mongo_op
+                field_name = key[:-len(op_suffix)-1]  # Remove _operador
+                break
+        
+        parsed_value = _parse_filter_value(value)
+        
+        # Se encontrou um operador, usa a sintaxe MongoDB
+        if operator_found:
+            if field_name not in filters:
+                filters[field_name] = {}
+            filters[field_name][operator_found] = parsed_value
+        else:
+            # Sem operador, usa igualdade simples
+            filters[key] = parsed_value
+    
+    return filters
+
+
 @router.get("/games/{category}")
 async def get_games(category: str, request: Request):
-    """Busca jogos de uma categoria usando filtros dinâmicos via query params."""
+    """Busca jogos de uma categoria usando filtros dinâmicos via query params.
+    
+    Suporta operadores de comparação: gte, lte, gt, lt, eq, ne, in, nin
+    Exemplos:
+        /games/football?score_gte=50&score_lte=100
+        /games/football?date_gt=2020-01-01&team=Barcelona
+    """
     if deps.load is None:
         raise HTTPException(status_code=503, detail="Load não inicializado")
 
-    filters = {}
     query_params = dict(request.query_params)
-    for key, value in query_params.items():
-        if value.isdigit():
-            filters[key] = int(value)
-        elif value.replace('.', '', 1).isdigit():
-            filters[key] = float(value)
-        else:
-            filters[key] = value
+    filters = _build_mongo_query(query_params)
 
     try:
         games = deps.database.read_data(category, query=filters)
