@@ -29,6 +29,10 @@ class Database:
         self.collection = self.database.get_collection('predictions')
         self.collection.replace_one({"game_id": prediction["game_id"]}, prediction, upsert=True)
 
+    def insert_player_stats(self, player_stats):
+        self.collection = self.database.get_collection('players_stats')
+        self.collection.insert_many(player_stats, ordered=False)
+    
     def read_data(self, collection, query={}):
         self.collection = self.database.get_collection(collection)
         return list(self.collection.find(query))

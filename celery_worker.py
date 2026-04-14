@@ -46,31 +46,50 @@ celery_app.conf.update(
 @celery_app.task(bind=True, name='extract_games_by_season')
 def extract_games_by_season_task(self, season_id: int, tournament_id: int, collection: str = "games", tournament_name: str="Unknow"):
     try:
+        database = Database()
+        loader = Load(database)
+        
         # Atualiza progresso
         self.update_state(state='PROGRESS', meta={'current': 0, 'total': 0, 'status': 'Iniciando extração...', 'tournament_name': tournament_name, 'seasons_id': season_id})
         
         # Inicializa extractor
         extractor = Extractor()
         self.update_state(state='PROGRESS', meta={'current': 0, 'total': 0, 'status': 'Extractor inicializado', 'tournament_name': tournament_name, 'seasons_id': season_id})
-        
+    
         # Extrai jogos
         games = extractor.get_games_by_season(tournament_id, season_id)
         self.update_state(state='PROGRESS', meta={'current': len(games), 'total': len(games), 'status': f'{len(games)} jogos extraídos', 'tournament_name': tournament_name, 'seasons_id': season_id})
-        
         # Aplica transformações se necessário
         if games:
             transformer = Transform(games, tournament_id)
-            games = transformer.transform()
+            
+            # Carrega os times
+            teams = transformer.transform_teams()
+            self.update_state(state='PROGRESS', meta={'current': 0, 'total': len(teams), 'status': f'{len(teams)} equipes encontradas', 'tournament_name': tournament_name, 'seasons_id': season_id})
+            loader.insert_data(teams, 'teams')
+            self.update_state(state='PROGRESS', meta={'current': len(teams), 'total': len(teams), 'status': 'Equipes salvas no MongoDB', 'tournament_name': tournament_name, 'seasons_id': season_id})
+            
+            #Carrega os jogadores
+            player_stats = database.read_data(collection='players_stats', query={'game_id': games[0]['id']})
+            if player_stats and len(player_stats) > 0:
+                print('Informação dos jogadores da partida já existem no MongoDB. Pulando etapa de extração e carga dos jogadores')   
+                self.update_state(state='PROGRESS', meta={'current': 0, 'total': 0, 'status': 'Informação dos jogadores da partida já existem no MongoDB. Pulando etapa de extração e carga dos jogadores', 'tournament_name': tournament_name, 'seasons_id': season_id})
+            else: 
+                players_stats = transformer.transform_players_stats()
+                self.update_state(state='PROGRESS', meta={'current': 0, 'total': len(players_stats), 'status': f'{len(players_stats)} jogadores encontrados', 'tournament_name': tournament_name, 'seasons_id': season_id})
+                database.insert_player_stats(players_stats)
+                self.update_state(state='PROGRESS', meta={'current': len(players_stats), 'total': len(players_stats), 'status': 'Jogadores salvos no MongoDB', 'tournament_name': tournament_name, 'seasons_id': season_id})
+                
+            games = transformer.transform_games()
             # Salva no MongoDB
-            database = Database()
-            loader = Load(database)
             loader.insert_data(games, collection)
             self.update_state(state='PROGRESS', meta={'current': len(games), 'total': len(games), 'status': 'Dados salvos no MongoDB', 'tournament_name': tournament_name, 'seasons_id': season_id})
-            database.disconnect()
             
             # Limpa ObjectIds do MongoDB para que os dados sejam JSON serializáveis
             games = process.clean_mongodb_ids(games)
-        
+
+        database.disconnect()
+
         return {
             'status': 'completed',
             'seasons_id': season_id,
@@ -151,10 +170,8 @@ def extract_all_games_task(
                 }
             )
             extracted_games = extractor.get_games_by_season(tournament_id, season['id'])
-            games_saved = database.read_data(collection, {'season': season['id'], 'tournament_id': tournament_id})
-            if len(games_saved) != len(extracted_games):
-                games.extend(extracted_games)
-        
+            games.extend(extracted_games)
+            
         self.update_state(
             state='PROGRESS', 
             meta={
@@ -169,14 +186,29 @@ def extract_all_games_task(
         # Aplica transformações se necessário
         if games:
             transformer = Transform(games, tournament_id)
-            games = transformer.transform()
+            games = transformer.transform_games()
             loader.insert_data(games, collection)
-            database.disconnect()
             self.update_state(state='PROGRESS', meta={'current': len(games), 'total': len(games), 'status': 'Dados salvos no MongoDB', 'tournament_name': tournament_name, 'seasons_id': ';'.join(map(str, seasons_ids)) if seasons_ids else None})
-            
             # Limpa ObjectIds do MongoDB para que os dados sejam JSON serializáveis
             games = process.clean_mongodb_ids(games)
-        
+            
+            # Carrega os times
+            teams = transformer.transform_teams()
+            self.update_state(state='PROGRESS', meta={'current': 0, 'total': len(teams), 'status': f'{len(teams)} equipes encontradas', 'tournament_name': tournament_name, 'seasons_id': season['id']})
+            loader.insert_data(teams, 'teams')
+            self.update_state(state='PROGRESS', meta={'current': len(teams), 'total': len(teams), 'status': 'Equipes salvas no MongoDB', 'tournament_name': tournament_name, 'seasons_id': season['id']})
+            
+            #Carrega os jogadores
+            player_stats = database.read_data(collection='players_stats', query={'game_id': games[0]['id']})
+            if player_stats and len(player_stats) > 0:
+                self.update_state(state='PROGRESS', meta={'current': 0, 'total': 0, 'status': 'Informação dos jogadores da partida já existem no MongoDB. Pulando etapa de extração e carga dos jogadores', 'tournament_name': tournament_name, 'seasons_id': season_id})
+            else: 
+                players_stats = transformer.transform_players_stats()
+                self.update_state(state='PROGRESS', meta={'current': 0, 'total': len(players_stats), 'status': f'{len(players_stats)} jogadores encontrados', 'tournament_name': tournament_name, 'seasons_id': season_id})
+                database.insert_player_stats(players_stats)
+                self.update_state(state='PROGRESS', meta={'current': len(players_stats), 'total': len(players_stats), 'status': 'Jogadores salvos no MongoDB', 'tournament_name': tournament_name, 'seasons_id': season_id})
+            
+        database.disconnect()
         return {
             'status': 'completed',
             'total_seasons': total_seasons,

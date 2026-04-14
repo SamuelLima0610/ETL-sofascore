@@ -29,7 +29,7 @@ class Extractor:
         dados = json.loads(element.text)
         seasons = dados["props"]["pageProps"]["initialProps"]["seasons"]
         return seasons
-    
+       
     def __get_game_stats(self, game_id):
         try:
             response = self.session.get(f"https://www.sofascore.com/api/v1/event/{game_id}/statistics")
@@ -37,6 +37,16 @@ class Extractor:
                 return None
             statistics = response.json()
             return statistics.get('statistics', [{}])[0].get('groups')
+        except Exception:
+            return None
+        
+    def __get_game_players_stats(self, game_id):
+        try:
+            response = self.session.get(f"https://www.sofascore.com/api/v1/event/{game_id}/lineups")
+            if response.status_code != 200:
+                return None
+            players_statistics = response.json()
+            return players_statistics
         except Exception:
             return None
     
@@ -55,10 +65,12 @@ class Extractor:
                 try:
                     game_info['season_id'] = season_id
                     game_info['stats'] = self.__get_game_stats(game['id'])
+                    game_info['players_stats'] = self.__get_game_players_stats(game['id'])
                     game_info['round'] = round
                     game_info['time'] = game.get('startTimestamp', None)
                 except (KeyError, IndexError):
                     game_info['stats'] = None
+                    game_info['players_stats'] = None
             games.append(game_info)
         return games
 

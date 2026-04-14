@@ -3,7 +3,8 @@ from fastapi import APIRouter, HTTPException
 from celery_worker import celery_app
 import utils.process as process
 import app_dependencies as deps
-from utils.tournaments import get_tournaments_info
+import base64
+from utils.tournaments import get_tournaments_info, get_team_image
 
 router = APIRouter()
 
@@ -34,6 +35,21 @@ async def health_check():
 async def get_tournaments():
     """Lista torneios disponíveis para cada categoria esportiva suportada."""
     return {"tournaments": get_tournaments_info()}
+
+@router.get("/teams/{team_id}")
+async def get_team(team_id: int):
+    """Retorna informações sobre um time específico."""
+    teams = deps.database.read_data('teams', query={"id": team_id})
+    team = process.clean_mongodb_ids(teams)
+    if not teams:
+        raise HTTPException(status_code=404, detail="Time não encontrado")
+    team = teams[0]  # Assume que o ID é único e pega o primeiro resultado
+    image_data = get_team_image(team)
+    if image_data:
+        team['image_data'] = base64.b64encode(image_data).decode('utf-8')
+    else:
+        team['image_data'] = None
+    return {"team": team}
 
 @router.get("/seasons")
 async def get_seasons(slug_tournament: str, tournament_id: int, country: str):

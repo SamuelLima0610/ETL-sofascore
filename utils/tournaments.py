@@ -1,7 +1,7 @@
 """Utility helpers for tournament discovery and categorization."""
 from fastapi import HTTPException
 import app_dependencies as deps
-
+import requests
 
 CATEGORIES = [
     "football",
@@ -46,3 +46,13 @@ def has_draws(category: str) -> bool:
     """
     sports_with_draws = {'football'}  # Only football allows draws by default in these sports
     return category.lower() in sports_with_draws
+
+def get_team_image(team: dict):
+    """Fetch team image data from the database if available."""
+    if team:
+        team_id = team.get("id")
+        if team_id:
+            response = requests.get(f"https://img.sofascore.com/api/v1/team/{team_id}/image/small")
+            if response.status_code == 200:
+                return response.content
+    return None
