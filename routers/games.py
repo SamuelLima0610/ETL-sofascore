@@ -110,3 +110,20 @@ async def get_game(collection: str, id: int):
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar jogo: {str(exc)}") from exc
+
+@router.get("/games/{collection}/{id}/players")
+async def get_players_of_game(collection: str, id: int):
+    """Busca os jogadores de um jogo específico pelo ID (síncrono) de uma determinada configuração."""
+    if deps.database is None:
+        raise HTTPException(status_code=503, detail="Database não inicializado")
+    try:
+        game = deps.database.read_data(collection, query={"id": id})
+        if not game:
+            raise HTTPException(status_code=404, detail="Jogo não encontrado")
+        players = deps.database.read_data("players_stats", query={"game_id": id})
+        players = process.clean_mongodb_ids(players)
+        return players
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar jogadores do jogo: {str(exc)}") from exc
