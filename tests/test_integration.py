@@ -11,39 +11,44 @@ class TestIntegration:
 
     def test_full_workflow_mock(self, client, setup_dependencies):
         """Testa um fluxo completo de uso da API com mocks."""
-        # 1. Verificar saúde
-        response = client.get("/health")
-        assert response.status_code == 200
+        with patch('routers.general.celery_app') as mock_celery:
+            mock_inspector = MagicMock()
+            mock_inspector.ping.return_value = {"worker1": "ok"}
+            mock_celery.control.inspect.return_value = mock_inspector
+            
+            # 1. Verificar saúde
+            response = client.get("/health")
+            assert response.status_code == 200
 
-        # 2. Buscar torneios
-        response = client.get("/tournaments")
-        assert response.status_code == 200
+            # 2. Buscar torneios
+            response = client.get("/tournaments")
+            assert response.status_code == 200
 
-        # 3. Buscar temporadas
-        response = client.get(
-            "/seasons",
-            params={
-                "slug_tournament": "brasileirao-serie-a",
-                "tournament_id": 325,
-                "country": "brazil"
-            }
-        )
-        assert response.status_code == 200
+            # 3. Buscar temporadas
+            response = client.get(
+                "/seasons",
+                params={
+                    "slug_tournament": "brasileirao-serie-a",
+                    "tournament_id": 325,
+                    "country": "brazil"
+                }
+            )
+            assert response.status_code == 200
 
-        # 4. Buscar jogos
-        deps.database.read_data = Mock(return_value=[
-            {
-                '_id': '507f1f77bcf86cd799439011',
-                'id': 1,
-                'home_team': 'Flamengo',
-                'away_team': 'São Paulo',
-                'home_score': 2,
-                'away_score': 1,
-            }
-        ])
-        response = client.get("/games/football")
-        assert response.status_code == 200
-        assert response.json()["count"] == 1
+            # 4. Buscar jogos
+            deps.database.read_data = Mock(return_value=[
+                {
+                    '_id': '507f1f77bcf86cd799439011',
+                    'id': 1,
+                    'home_team': 'Flamengo',
+                    'away_team': 'São Paulo',
+                    'home_score': 2,
+                    'away_score': 1,
+                }
+            ])
+            response = client.get("/games/football")
+            assert response.status_code == 200
+            assert response.json()["count"] == 1
 
     def test_error_handling_cascade(self, client, setup_dependencies):
         """Testa cascata de tratamento de erros."""
