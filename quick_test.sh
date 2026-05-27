@@ -25,7 +25,7 @@ echo ""
 
 # Install dependencies
 echo "📦 Installing test dependencies..."
-pip install -q pytest pytest-asyncio httpx 2>/dev/null || true
+pip install -q -r requirements-dev.txt 2>/dev/null || pip install -r requirements-dev.txt
 echo "✅ Dependencies installed"
 echo ""
 

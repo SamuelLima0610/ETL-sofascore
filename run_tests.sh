@@ -46,6 +46,10 @@ case "${1:-all}" in
         ;;
     watch)
         echo "Running tests in watch mode..."
+        if ! python -c "import pytest_watch" 2>/dev/null; then
+            echo -e "${YELLOW}⚠️  pytest-watch not found. Installing...${NC}"
+            pip install -q pytest-watch
+        fi
         pytest-watch tests/ -- -v
         ;;
     coverage)
@@ -56,6 +60,10 @@ case "${1:-all}" in
         ;;
     parallel)
         echo "Running tests in parallel..."
+        if ! python -c "import xdist" 2>/dev/null; then
+            echo -e "${YELLOW}⚠️  pytest-xdist not found. Installing...${NC}"
+            pip install -q pytest-xdist
+        fi
         pytest tests/ -n auto -v
         ;;
     file)
